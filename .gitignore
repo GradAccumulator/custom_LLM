@@ -1,0 +1,12 @@
+PATHES/
+logs/
+check_my_transformer_size/
+.vscode/
+**/*.json
+assets/
+c_modules/
+__pycache__/
+analysis/
+**/*.txt
+**/*.pyc
+bigdata/
