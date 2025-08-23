@@ -1,12 +1,17 @@
 import torch
+from .activation_function import ActivationFunction
+from src.utils.torch_utils import device_dtype_check
 
-class ReLU:
+class ReLU(ActivationFunction):
     def __init__(self):
         pass
     def __call__(self, x:torch.Tensor):
         return torch.where(x>0, x, torch.tensor(0))
     
-class LeakyReLU:
+    def __repr__(self):
+        return "ReLU"
+    
+class LeakyReLU(ActivationFunction):
     def __init__(self, a=0.1):
         self.a = a
 
@@ -14,9 +19,12 @@ class LeakyReLU:
         return torch.where(x>0, x, x*self.a)
     def __call__(self, x:torch.Tensor):
         return self.forward(x)
+    
+    def __repr__(self):
+        return f"LeakyReLU(a={self.a})"
 
 from src.modules.base_module import BaseModule
-class PReLU(BaseModule):
+class PReLU(BaseModule, ActivationFunction):
     def __init__(self, a_init=0.1, device='cpu', dtype=torch.float32):
         self.device = device
         self.dtype = dtype
@@ -41,9 +49,10 @@ class PReLU(BaseModule):
     def init_like(self):
         return PReLU(a_init=self.a_init, device=self.device, dtype=self.dtype)
     def to(self, device=None, dtype=None):
+        device, dtype = device_dtype_check(device, dtype)
         if (self.device==device or device is None) and (self.dtype==dtype or dtype is None):
             return self
-        prelu = PReLU(a_init=self.a_init, device=device if device else self.device, dtype=dtype if dtype else self.dtype)
+        prelu = PReLU(a_init=self.a_init, device=device or self.device, dtype=dtype or self.dtype)
         prelu._a = self._a.detach().to(device=prelu.device, dtype=prelu.dtype).requires_grad_()
         return prelu
     
@@ -58,3 +67,6 @@ class PReLU(BaseModule):
         with torch.no_grad():
             self._a.copy_(state['a'].to(device=self.device, dtype=self.dtype).requires_grad_())
             self._a.grad = state['a_grad'].to(device=self.device, dtype=self.dtype)
+            
+    def __repr__(self):
+        return f'PReLU(a={self.a.tolist()})'

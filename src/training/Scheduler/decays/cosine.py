@@ -9,3 +9,6 @@ class CosineDecay:
     
     def step(self, current_step):
         return self.min_lr + 0.5*(self.max_lr-self.min_lr)*(1+math.cos((current_step/self.total)*math.pi))
+    
+    def __repr__(self):
+        return 'CosineDecay'

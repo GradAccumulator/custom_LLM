@@ -119,3 +119,18 @@ class Scheduler:
         scheduler.max_lr = state['max_lr']
         optimizer.lr = state['current_lr']
         return scheduler
+    
+    def __repr__(self):
+        return (
+            f'Scheduler(\n'
+            f'    warmup_type={self.warmup},\n'
+            f'    warmup_steps={self.warmup_steps},\n'
+            f'    decay_type={self.decay},\n'
+            f'    total_steps={self.total_steps},\n'
+            f'    min_lr={self.min_lr},\n'
+            f'    max_lr={self.max_lr},\n'
+            f'    current_lr={self.lr},\n'
+            f'    current_step={self._step},\n'
+            f'    current_phase={self.current_phase}\n'
+            f')'
+        )

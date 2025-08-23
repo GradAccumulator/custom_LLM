@@ -74,4 +74,18 @@ class Adam(BaseOptimizer):
         state['v'] = v
         state['t'] = self.t
         return state
-            
+    
+    def __repr__(self):
+        return (
+            f"Adam(\n"
+            f'    device={self.device},\n'
+            f'    dtype={self.dtype},\n'
+            f'    parameters={self.parameters},\n'
+            f'    lr={self.lr},\n'
+            f'    beta1={self.b1},\n'
+            f'    beta2={self.b2},\n'
+            f'    weight_decay={self.weight_decay},\n'
+            f'    eps={self.eps},\n'
+            f'    clip_grad={self.clip_grad}\n'
+            f')'
+        )

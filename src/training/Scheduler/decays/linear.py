@@ -10,3 +10,6 @@ class LinearDecay:
 
     def step(self, current_step):
         return max(self.min_lr, ((self.total - current_step) / (self.total-self.warmup)) * self.max_lr)
+    
+    def __repr__(self):
+        return 'LinearDecay'

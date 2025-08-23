@@ -4,6 +4,7 @@ from .linear import Linear
 from .scale import Scale
 from .activation_functions import Softmax
 from .dropout import Dropout
+from src.utils.torch_utils import device_dtype_check
 
 class SelfAttention(BaseModule):
     def __init__(self, d_model, num_heads,*,device='cpu', dtype=torch.float32, use_bias=False, init_method='Xavier', mask_type='causal', seq_len=None, scale_qk_value=None, learnable_scale_qk=False, dropout_p=0.1):
@@ -85,6 +86,7 @@ class SelfAttention(BaseModule):
         return params
     
     def to(self, device=None, dtype=None):
+        device, dtype = device_dtype_check(device, dtype)
         new = self.init_like()
         new.linear = self.linear.to(device, dtype)
         if self.scale_qk_value is not None:
@@ -134,3 +136,19 @@ class SelfAttention(BaseModule):
         except ValueError as e:
             print("<< SelfAttention load_state error >>")
             raise e
+        
+    def __repr__(self):
+        return (
+            f'SelfAttention(\n'
+            f'    d_model={self.d_model},\n'
+            f'    num_heads={self.num_heads},\n'
+            f'    device={self.device},\n'
+            f'    dtype={self.dtype},\n'
+            f'    init_method={self.init_method},\n'
+            f'    mask_type={self.mask_type},\n'
+            f'    seq_len={self.seq_len},\n'
+            f'    scale_qk_value={self.scale_qk_value},\n'
+            f'    learnable_scale_qk={hasattr(self, "scale_qk") and self.scale_qk.learnable},\n'
+            f'    dropout_p={self.dropout.p if self.dropout else 0.0}\n'
+            f')'
+        )

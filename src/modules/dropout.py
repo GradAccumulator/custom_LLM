@@ -13,6 +13,9 @@ class Dropout:
         
     @property
     def mode(self):
+        return 'train' if self._is_training else 'eval'
+    @property
+    def is_training(self):
         return self._is_training
     def eval(self):
         self._is_training = False
@@ -28,3 +31,6 @@ class Dropout:
     
     def __call__(self, x):
         return self.forward(x)
+    
+    def __repr__(self):
+        return f"Dropout(p={self.p}, mode={self.mode})"

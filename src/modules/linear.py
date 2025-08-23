@@ -1,5 +1,6 @@
 import torch
 from .base_module import BaseModule
+from src.utils.torch_utils import device_dtype_check
 
 class Linear(BaseModule):
     def __init__(self, d_in, d_out,*, device='cpu', dtype=torch.float32, init_method:str='He', use_bias:bool=True):
@@ -28,6 +29,9 @@ class Linear(BaseModule):
         return [self._weight, self._bias] if self.use_bias else [self._weight]
     
     def to(self, device=None, dtype=None):
+        device,dtype = device_dtype_check(device, dtype)
+        if self.dtype==dtype or dtype is None:
+            return self
         new = self.init_like()
         new.device = device if device is not None else self.device
         new.dtype = dtype if dtype is not None else self.dtype
@@ -62,7 +66,7 @@ class Linear(BaseModule):
             'weight': self._weight.detach().cpu(),
             'bias': self._bias.detach().cpu() if self.use_bias else None,
             'weight_grad': self._weight.grad.detach().cpu() if self._weight.grad is not None else None,
-            'bias_grad': self._bias.grad.detach().cpu() if self.use_bias else None
+            'bias_grad': self._bias.grad.detach().cpu() if self.use_bias and self._bias.grad is not None else None
         }
     
     def load_state(self, state):
@@ -76,3 +80,6 @@ class Linear(BaseModule):
                 self.bias.copy_(state['bias'].to(self.device, self.dtype).requires_grad_())
                 if state['bias_grad'] is not None:
                     self.bias.grad = state['bias_grad'].to(self.device, self.dtype)
+                    
+    def __repr__(self):
+        return f'Linear(d_in={self.d_in}, d_out={self.d_out}, device={self.device}, dtype={self.dtype}, use_bias={self.use_bias})'

@@ -1,5 +1,6 @@
 import torch
 from .base_module import BaseModule
+from src.utils.torch_utils import device_dtype_check
 
 class LayerNorm(BaseModule):
     def __init__(self, dim,*,eps=1e-5, device='cpu', dtype=torch.float32):
@@ -23,6 +24,7 @@ class LayerNorm(BaseModule):
         return [self.gamma, self.beta]
     
     def to(self, device=None, dtype=None):
+        device, dtype = device_dtype_check(device, dtype)
         if (self.device==device or device is None) and (self.dtype==dtype or dtype is None):
             return self
         ln = self.clone()
@@ -58,3 +60,6 @@ class LayerNorm(BaseModule):
                 self.gamma.grad = state['gamma_grad'].to(self.device, self.dtype)
             if state['beta_grad'] is not None:
                 self.beta.grad = state['beta_grad'].to(self.device, self.dtype)
+                
+    def __repr__(self):
+        return f'LayerNorm(dim={self.dim}, eps={self.eps})'

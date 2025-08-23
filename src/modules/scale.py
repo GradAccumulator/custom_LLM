@@ -1,6 +1,7 @@
 import torch
 from .base_module import BaseModule
 from src.utils.types import ListLike
+from src.utils.torch_utils import device_dtype_check
 
 class Scale(BaseModule):
     def __init__(self,value:ListLike|float,*, shape=None, learnable=False, dtype=torch.float32, device=None):
@@ -33,6 +34,7 @@ class Scale(BaseModule):
         return [self.scale]
     
     def to(self, device=None, dtype=None):
+        device, dtype = device_dtype_check(device, dtype)
         if (device is None and dtype is None) or (self.device == device and self.dtype == dtype):
             return self
         scale = self._init_like()
@@ -67,4 +69,14 @@ class Scale(BaseModule):
                     self.scale.grad.copy_(state['scale_grad'].to(self.device, self.dtype))
             else:
                 self.scale.copy_(state['scale'].to(self.device, self.dtype))
-                
+    
+    def __repr__(self):
+        return (
+            f'Scale(\n'
+            f'    value={self.value},\n'
+            f'    shape={self.shape},\n'
+            f'    learnable={self.learnable},\n'
+            f'    dtype={self.dtype},\n'
+            f'    device={self.device}\n'
+            f')'
+        )

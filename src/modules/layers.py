@@ -1,5 +1,6 @@
 import torch
 from typing import overload, Any
+from src.utils.torch_utils import device_dtype_check
 
 
 class Layers:
@@ -73,6 +74,7 @@ class Layers:
         return self.layers[idx]
     
     def to(self, device=None, dtype=None):
+        device, dtype = device_dtype_check(device, dtype)
         if (self.device==device or device is None) and (self.dtype == dtype or dtype is None):
             return self
         new = Layers(self.modules, self.num_layers, self.device, self.dtype)
@@ -98,3 +100,14 @@ class Layers:
                     f'(layer keys: {list(layer.keys())})'
                 )
                 self[i][k].load_state(v)
+                
+    def __repr__(self):
+        return (
+            'Layers(\n'
+            f'    device={self.device},\n'
+            f'    dtype={self.dtype},\n'
+            f'    num_layers={self.num_layers},\n'
+            f'    modules={self.modules}\n'
+            ') : \n<<modules>>\n'
+            +'\n    '.join([f'{i}: {module}' for i,module in self.modules.items()])
+        )

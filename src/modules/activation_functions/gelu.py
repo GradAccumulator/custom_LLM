@@ -1,8 +1,9 @@
 import torch
 import math
 from .tanh import Tanh
+from .activation_function import ActivationFunction
 
-class GELU:
+class GELU(ActivationFunction):
     def __init__(self, erf=True):
         if erf:
             self.forward = self.gelu_erf
@@ -20,3 +21,6 @@ class GELU:
     
     def __call__(self, x:torch.Tensor):
         return self.forward(x)
+    
+    def __repr__(self):
+        return f'GELU(erf={self.forward == self.gelu_erf})'

@@ -1,5 +1,6 @@
 import torch
-from typing import overload
+from typing import overload, Any
+from src.utils.torch_utils import device_dtype_check
 
 class Sequential:
     '''
@@ -49,9 +50,6 @@ class Sequential:
             x = layer(x)
         return x
     
-    def __getitem__(self, idx):
-        return self.layers[idx]
-    
     def __call__(self, x):
         return self.forward(x)
     
@@ -61,6 +59,7 @@ class Sequential:
         return self.params_as_list
     
     def to(self, device=None, dtype=None):
+        device, dtype = device_dtype_check(device, dtype)
         if (device is None and dtype is None) or (self.device == device and self.dtype == dtype):
             return self
         seq = self.clone()
@@ -74,11 +73,18 @@ class Sequential:
     def __len__(self):
         return len(self.layers)
     
+    def __getitem__(self, idx:int) -> dict[str,Any]:
+        if idx not in self.layers.keys():
+            raise IndexError(idx)
+        return self.layers[idx]
+    def __setitem__(self, idx:int, value:dict[str,Any]):
+        self.layers[idx] = value
+    
     def _shallow_copy(self):
         if self.is_dict:
             seq = Sequential(self.layers, device=self.device, dtype=self.dtype)
         else:
-            seq = Sequential(list(self.layers.values()), device=self.device, dtype=self.dtype)
+            seq = Sequential(*list(self.layers.values()), device=self.device, dtype=self.dtype)
         return seq
         
     
@@ -128,3 +134,13 @@ class Sequential:
     @property
     def is_training(self):
         return self._is_training
+    
+    def __repr__(self):
+        return (
+            f'Sequential(\n'
+            f'    device={self.device},\n'
+            f'    dtype={self.dtype},\n'
+            f'    layers={self.layers}\n'
+            ') : \n<<layers>>\n'
+            +'\n    '.join([f'{i}: {module}' for i,module in self.layers.items()])
+        )

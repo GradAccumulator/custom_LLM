@@ -9,3 +9,6 @@ class LinearWarmup:
     
     def step(self, current_step):
         return self.min_lr + (self.max_lr - self.min_lr) * current_step / self.warmup
+    
+    def __repr__(self):
+        return 'LinearWarmup'

@@ -113,3 +113,14 @@ class SGD(BaseOptimizer):
         if state['momentum'] != 0:
             sgd.v = state['v']
         return sgd
+    
+    def __repr__(self):
+        return (
+            f'SGD(\n'
+            f'    lr={self.lr},\n'
+            f'    momentum={self.momentum},\n'
+            f'    nesterov={self.nesterov},\n'
+            f'    weight_decay={self.weight_decay},\n'
+            f'    dampening={self.dampening}\n'
+            f')'
+        )

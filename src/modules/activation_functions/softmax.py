@@ -1,7 +1,9 @@
 import torch
+from .activation_function import ActivationFunction
+from src.utils.torch_utils import device_dtype_check
 
-class Softmax:
-    def __init__(self, dim=-1, dtype=torch.float32, temperature=1.0):
+class Softmax(ActivationFunction):
+    def __init__(self, dim=-1, temperature=1.0):
         self.dim=dim
         self.reciprocal_temp = 1/temperature
         self.temp = temperature
@@ -21,10 +23,8 @@ class Softmax:
         sum = exps.sum(dim=self.dim, keepdim=True)
         return exps/sum
     
-    def to(self, device=None, dtype=None):
-        if self.dtype==dtype or dtype is None:
-            return self
-        return Softmax(dim=self.dim, dtype=dtype, temperature=self.temp)
-    
     def __call__(self, x:torch.Tensor):
         return self.softmax(x)
+    
+    def __repr__(self):
+        return f"Softmax(dim={self.dim}, temperature={self.temp})"

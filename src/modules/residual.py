@@ -22,3 +22,6 @@ class Residual:
         return res
     def init_like():
         return Residual()
+    
+    def __repr__(self):
+        return f'Residual(value={self.value})'
