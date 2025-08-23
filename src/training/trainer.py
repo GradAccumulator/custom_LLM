@@ -45,7 +45,7 @@ class Trainer:
         self.grad_accumulation = self.config.grad_accumulation
         self.current_step = 0
         self.validation = validation
-        self.acc_fn = torchmetrics.Accuracy(task="multiclass", num_classes=self.model.tokenizer.vocab_size).to(self.model.device)
+        self.acc_fn = torchmetrics.Accuracy(task="multiclass", num_classes=self.model.tokenizer.vocab_size, ignore_index=self.model.tokenizer.pad_id).to(self.model.device)
         self.effective_steps_per_epoch = math.ceil(self.config.steps_per_epoch/self.grad_accumulation)
         self.nstep = 27
         self.nloss = 21
@@ -62,23 +62,20 @@ class Trainer:
             f'effective_steps_per_epoch:{self.effective_steps_per_epoch}\n'
             f'max_grad_norm:{self.optimizer.max_grad_norm}\n'
             f'min_lr&max_lr:{self.scheduler.min_lr:.3g} to {self.scheduler.max_lr:.3g}\n'
-            f'adamW (wd,eps,beta1,beta2):({self.optimizer.weight_decay},{self.optimizer.eps},{self.optimizer.b1},{self.optimizer.b2})\n'
+            f'optimizer:({self.optimizer})\n'
         )
 
     def validate(self) -> tuple[float, float]:
         avg_loss = 0.0
-        num_total_correct = 0
-        num_total_tokens = 0
+        avg_acc = 0
         clear_memory()
         self.model.eval()
         with torch.no_grad():
             for (val_x, val_label) in self.val_loader:
-                    logits = self.model(val_x)
-                    size_rate = self.val_loader.current_size_rate()
-                    avg_loss += self.loss_fn(logits,val_label).item()*size_rate
-                    num_total_correct += (logits.argmax(dim=-1)==val_label).float().sum().item()
-                    num_total_tokens += val_label.numel()
-        avg_acc = num_total_correct/num_total_tokens
+                logits = self.model(val_x)
+                size_rate = self.val_loader.current_size_rate()
+                avg_loss += self.loss_fn(logits,val_label).item()*size_rate
+                avg_acc += self.acc_fn(logits.view(-1, logits.size(-1)), val_label.view(-1)).item()*size_rate
         clear_memory()
         self.model.train()
         log = f'effective step:{self.effective_step}/{self.effective_steps_per_epoch}'.ljust(self.nstep)+ \
@@ -209,7 +206,8 @@ class Trainer:
                 
                 #record loss and acc
                 self.avg_loss_in_accum += loss.item()
-                self.total_acc_in_accum += self.acc_fn(logits.view(-1, logits.size(-1)), train_label.view(-1))
+                with torch.no_grad():
+                    self.total_acc_in_accum += self.acc_fn(logits.view(-1, logits.size(-1)), train_label.view(-1))
                 
                 #tboard log
                 self.tboard_update_loss(self.avg_loss_in_accum, val_loss, logits, train_label, val_acc, self.total_acc_in_accum)

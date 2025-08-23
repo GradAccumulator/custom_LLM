@@ -179,7 +179,7 @@ class Transformer:
             self._reset_params()
         #-------------------------
         self.init_cache()
-        self.softmax = Softmax(dim=-1, dtype=torch.float16)
+        self.softmax = Softmax(dim=-1)
 
     def get_qkv(self, x:torch.Tensor, i:int, batch:int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         '''\n
