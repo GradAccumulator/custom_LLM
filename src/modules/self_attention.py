@@ -40,10 +40,10 @@ class SelfAttention(BaseModule):
     def use_bias(self):
         return self._use_bias
     
-    def _make_mask(self, seq_len):
+    def _make_mask(self, seq_len, dtype=torch.float32):
         if self.seq_len == seq_len:
             return self.cached_mask
-        return torch.full((seq_len, seq_len), float('-inf'), device=self.device, dtype=self.dtype).triu(diagonal=1)
+        return torch.full((seq_len, seq_len), float('-inf'), device=self.device, dtype=dtype).triu(diagonal=1)
     
     def _get_qkv(self, x:torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         '''
@@ -58,9 +58,9 @@ class SelfAttention(BaseModule):
     def _attention(self, Q,K,V, seq_len):
         scores = (Q@K.transpose(-2, -1))*self.recip_root_d_k
         if seq_len == self.seq_len:
-            masked = scores + self.cached_mask
+            masked = scores + self.cached_mask.to(scores.dtype)
         else:
-            masked = scores + self._make_mask(seq_len)
+            masked = scores + self._make_mask(seq_len, dtype=scores.dtype)
         weight = self.softmax(masked)
         if self.dropout:
             weight = self.dropout(weight)
@@ -79,7 +79,10 @@ class SelfAttention(BaseModule):
         return self.forward(x)
     
     def parameters(self):
-        return self.linear.parameters()
+        params = self.linear.parameters()
+        if hasattr(self, 'scale_qk') and self.scale_qk.learnable:
+            params += self.scale_qk.parameters()
+        return params
     
     def to(self, device=None, dtype=None):
         new = self.init_like()
@@ -91,20 +94,35 @@ class SelfAttention(BaseModule):
     def clone(self):
         atten = SelfAttention(self.d_model, self.num_heads, device=self.device, dtype=self.dtype, use_bias=self.use_bias, init_method=self.init_method, mask_type=self.mask_type, seq_len=self.seq_len)
         atten.linear = self.linear.clone()
+        if self.scale_qk_value is not None:
+            atten.scale_qk = self.scale_qk.clone()
+        return atten
     
     def init_like(self):
-        return SelfAttention(self.d_model, self.num_heads, device=self.device, dtype=self.dtype, use_bias=self.use_bias, init_method=self.init_method, mask_type=self.mask_type, seq_len=self.seq_len, scale_qk_value=self.scale_qk_value, learnable_scale_qk=self.scale_qk.learnable, dropout_p=self.dropout.p if self.dropout else 0.0)
+        return SelfAttention(
+            self.d_model, self.num_heads, 
+            device              =self.device, 
+            dtype               =self.dtype, 
+            use_bias            =self.use_bias, 
+            init_method         =self.init_method, 
+            mask_type           =self.mask_type, 
+            seq_len             =self.seq_len, 
+            scale_qk_value      =self.scale_qk_value, 
+            learnable_scale_qk  =hasattr(self, 'scale_qk') and self.scale_qk.learnable, 
+            dropout_p           =self.dropout.p if self.dropout else 0.0,
+        )
     
     def state_dict(self):
         return {
             'linear': self.linear.state_dict(),
-            'scale_qk': self.scale_qk.state_dict(),
+            'scale_qk': self.scale_qk.state_dict() if hasattr(self, 'scale_qk') and self.scale_qk.learnable else None,
         }
         
     def load_state(self, state):
         try:
-            self.linear.load_state_dict(state['linear'])
-            self.scale_qk.load_state_dict(state['scale_qk'])
+            self.linear.load_state(state['linear'])
+            if hasattr(self, 'scale_qk') and self.scale_qk.learnable:
+                self.scale_qk.load_state(state['scale_qk'])
         except ValueError as e:
             print("<< SelfAttention load_state error >>")
             raise e

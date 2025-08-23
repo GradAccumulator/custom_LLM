@@ -55,13 +55,13 @@ class Linear(BaseModule):
         return linear
     
     def init_like(self):
-        return Linear(self.d_in, self.d_out, device=self.device, dtype=self.dtype, init_method=self.init_method)
+        return Linear(self.d_in, self.d_out, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
     
     def state_dict(self):
         return {
             'weight': self._weight.detach().cpu(),
             'bias': self._bias.detach().cpu() if self.use_bias else None,
-            'weight_grad': self._weight.grad.detach().cpu(),
+            'weight_grad': self._weight.grad.detach().cpu() if self._weight.grad is not None else None,
             'bias_grad': self._bias.grad.detach().cpu() if self.use_bias else None
         }
     
@@ -69,7 +69,10 @@ class Linear(BaseModule):
         super().state_key_check_with_raise(state.keys(), ['weight', 'bias', 'weight_grad', 'bias_grad'], Linear, 'load_state')
         with torch.no_grad():
             self.weight.copy_(state['weight'].to(self.device, self.dtype).requires_grad_())
-            self.weight.grad = state['weight_grad'].to(self.device, self.dtype)
+            if state['weight_grad'] is not None:
+                self.weight.grad = state['weight_grad'].to(self.device, self.dtype)
+                
             if self.use_bias:
                 self.bias.copy_(state['bias'].to(self.device, self.dtype).requires_grad_())
-                self.bias.grad = state['bias_grad'].to(self.device, self.dtype)
+                if state['bias_grad'] is not None:
+                    self.bias.grad = state['bias_grad'].to(self.device, self.dtype)

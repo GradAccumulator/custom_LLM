@@ -35,10 +35,12 @@ class Scale(BaseModule):
     def to(self, device=None, dtype=None):
         if (device is None and dtype is None) or (self.device == device and self.dtype == dtype):
             return self
-        scale = self.clone()
+        scale = self._init_like()
         scale.device = device if device is not None else self.device
         scale.dtype = dtype if dtype is not None else self.dtype
-        scale.scale = self.scale.detach().to(device=scale.device, dtype=scale.dtype).requires_grad_()
+        scale.scale = self.scale.detach().to(device=scale.device, dtype=scale.dtype)
+        if self.learnable:
+            scale.scale = scale.scale.requires_grad_()
         return scale
     
     def _clone(self):
@@ -54,12 +56,15 @@ class Scale(BaseModule):
     def state_dict(self):
         return {
             'scale':self.scale.detach().cpu(),
-            'scale_grad':self.scale.grad.detach().cpu() if hasattr(self.scale, 'grad') else None
+            'scale_grad':self.scale.grad.detach().cpu() if self.scale.grad is not None else None
         }
     def load_state(self, state):
         self.state_key_check_with_raise(state.keys(), ['scale', 'scale_grad'], Scale, 'load_state')
         with torch.no_grad():
-            self.scale.copy_(state['scale'].to(self.device, self.dtype).requires_grad_())
             if self.learnable:
-                self.scale.grad = state['scale_grad'].to(self.device, self.dtype)
+                self.scale.copy_(state['scale'].to(self.device, self.dtype).requires_grad_())
+                if state['scale_grad'] is not None:
+                    self.scale.grad.copy_(state['scale_grad'].to(self.device, self.dtype))
+            else:
+                self.scale.copy_(state['scale'].to(self.device, self.dtype))
                 
