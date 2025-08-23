@@ -1,6 +1,6 @@
 import torch
-from ...modules.sequential import Sequential, Layers
-from ...modules import Linear, Dropout, LayerNorm, SelfAttention, Residual, Scale, To
+from ...modules.sequential import Sequential
+from ...modules import Linear, Dropout, LayerNorm, SelfAttention, Residual, Scale, To, Layers
 from ...nlp.embedding import Embedding
 
 class TransformerII:

@@ -10,3 +10,4 @@ analysis/
 **/*.txt
 **/*.pyc
 bigdata/
+!folder_tree.txt

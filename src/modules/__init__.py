@@ -9,3 +9,4 @@ from .to import To
 from .activation_functions import *
 from .loss_functions import *
 from .sequential import Sequential
+from .layers import Layers

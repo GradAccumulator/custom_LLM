@@ -15,7 +15,7 @@ class LeakyReLU:
     def __call__(self, x:torch.Tensor):
         return self.forward(x)
 
-from src.models.modules.base_module import BaseModule
+from src.modules.base_module import BaseModule
 class PReLU(BaseModule):
     def __init__(self, a_init=0.1, device='cpu', dtype=torch.float32):
         self.device = device

@@ -52,6 +52,7 @@ class Trainer:
         self.nacc = 28
         self.ngnorm = 21
         self.effective_step = 0
+        self.validation_interval = self.config.validation_interval*self.grad_accumulation
         self.logger.write(
             f'<<{datetime.datetime.now().isoformat()[:-7]}>>\n'
             f'grad_accummulation:{self.grad_accumulation}\n'
@@ -159,18 +160,19 @@ class Trainer:
         if self.scheduler:
             self.scheduler.step()
         self.optimizer.zero_grad()
-        log = (
-            f'effective step:{self.effective_step}/{self.effective_steps_per_epoch}'.ljust(self.nstep)+
-            f'| train loss:{self.avg_loss_in_accum:.4g}'.ljust(self.nloss)+
-            f'| train accuracy:{(self.total_acc_in_accum/self.grad_accumulation).item()*100:.3g}%'.ljust(self.nacc)+' '
-        )
-        log_norms_and_lr = (
-            f'| grad_norm:{self.optimizer.prev_grad_norm.item():.4g}'.ljust(self.ngnorm)+
-            f'| weight_norm:{self.weight_norm.item():.4g}'.ljust(self.ngnorm-2)+
-            f'| lr:{self.scheduler.prev_lr:.5g}'
-        )
-        print(log+log_norms_and_lr)
-        self.logger.write(datetime.datetime.now().isoformat()+" | "+log+'\n\t'+log_norms_and_lr)
+        if self.effective_step%self.config.log_interval==0:
+            log = (
+                f'effective step:{self.effective_step}/{self.effective_steps_per_epoch}'.ljust(self.nstep)+
+                f'| train loss:{self.avg_loss_in_accum:.4g}'.ljust(self.nloss)+
+                f'| train accuracy:{(self.total_acc_in_accum/self.grad_accumulation).item()*100:.3g}%'.ljust(self.nacc)+' '
+            )
+            log_norms_and_lr = (
+                f'| grad_norm:{self.optimizer.prev_grad_norm.item():.4g}'.ljust(self.ngnorm)+
+                f'| weight_norm:{self.weight_norm.item():.4g}'.ljust(self.ngnorm-2)+
+                f'| lr:{self.scheduler.prev_lr:.5g}'
+            )
+            print(log+log_norms_and_lr)
+            self.logger.write(datetime.datetime.now().isoformat()+" | "+log+'\n\t'+log_norms_and_lr)
         self.avg_loss_in_accum = 0
         self.total_acc_in_accum = 0
     
@@ -196,7 +198,7 @@ class Trainer:
         for (train_x, train_label) in self.train_loader:
                 self.current_step+=1
                 
-                if self.validation and (self.current_step%self.config.validation_interval==0 or self.current_step==1):
+                if self.validation and (self.current_step%self.validation_interval==0 or self.current_step==1):
                     val_loss, val_acc = self.validate()
                 
                 logits, loss = self.forward_and_compute_loss(train_x, train_label)

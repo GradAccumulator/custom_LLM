@@ -6,7 +6,10 @@ class To:
         self.device = device
         self.dtype = dtype
         
-    def __call__(self, x):
+    def forward(self, x):
         return x.to(self.device, self.dtype)
+        
+    def __call__(self, x):
+        return self.forward(x)
     def to(self, device=None, dtype=None):
         return To(device=device or self.device, dtype=dtype or self.dtype)
