@@ -35,11 +35,13 @@ class Layers:
     def _set_layers(self, modules:dict):
         self.layers = [{} for _ in range(self.num_layers)]
         for i in range(self.num_layers):
-            for k,v in modules.items():
-                if hasattr(v, 'init_like'):
-                    self.layers[i][k] = v.init_like().to(device=self.device, dtype=self.dtype)
+            for k,m in modules.items():
+                if hasattr(m, 'init_like'):
+                    m = m.init_like()
+                if hasattr(m, 'to'):
+                    self.layers[i][k] = m.to(device=self.device, dtype=self.dtype)
                 else:
-                    self.layers[i][k] = v.to(device=self.device, dtype=self.dtype)
+                    self.layers[i][k] = m
         self.cache_parameters()
     
     def cache_parameters(self):
@@ -52,7 +54,7 @@ class Layers:
         self.params_as_list = [p for module in self.modules.values() if hasattr(module, 'parameters') for p in module.parameters()]
 
     def parameters_as_dict(self):
-        return self.params_as_dict if hasattr(self, 'params_as_dict') else None
+        return self.params_as_dict
     def parameters(self):
         return self.params_as_list
     
@@ -77,7 +79,7 @@ class Layers:
         for i in range(self.num_layers):
             for k,m in self.modules.items():
                 if hasattr(m, 'to'):
-                    new[i][k] = m.to(device=device if device else self.device, dtype=dtype if dtype else self.dtype)
+                    new[i][k] = m.to(device=device or self.device, dtype=dtype or self.dtype)
                 else:
                     new[i][k] = m
         return new

@@ -19,11 +19,15 @@ class Scale(BaseModule):
             self.clone = self._clone
             self.init_like = self._init_like
     
-    def forward(self, x):
-        return x*self.scale.half()
+    def forward(self, x:torch.Tensor):
+        return x*self.scale.to(x.dtype)
     
     def __call__(self, x):
         return self.forward(x)
+    def __mul__(self, other):
+        return self.forward(other)
+    def __rmul__(self, other):
+        return self.forward(other)
     
     def _parameters(self):
         return [self.scale]
@@ -58,3 +62,4 @@ class Scale(BaseModule):
             self.scale.copy_(state['scale'].to(self.device, self.dtype).requires_grad_())
             if self.learnable:
                 self.scale.grad = state['scale_grad'].to(self.device, self.dtype)
+                

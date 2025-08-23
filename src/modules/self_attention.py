@@ -52,7 +52,7 @@ class SelfAttention(BaseModule):
         '''
         Q,K,V = self.linear(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head*3).transpose(1, 2).split(self.d_head, dim=-1)
         if self.scale_qk_value is not None:
-            return (Q*self.scale_qk.to(x.dtype), K*self.scale_qk.to(x.dtype),K,V)
+            return (Q*self.scale_qk, K*self.scale_qk,V)
         return (Q,K,V)
     
     def _attention(self, Q,K,V, seq_len):
@@ -82,8 +82,11 @@ class SelfAttention(BaseModule):
         return self.linear.parameters()
     
     def to(self, device=None, dtype=None):
-        super().to(self.parameters, device, dtype)
-        return self
+        new = self.init_like()
+        new.linear = self.linear.to(device, dtype)
+        if self.scale_qk_value is not None:
+            new.scale_qk = self.scale_qk.to(device, dtype)
+        return new
     
     def clone(self):
         atten = SelfAttention(self.d_model, self.num_heads, device=self.device, dtype=self.dtype, use_bias=self.use_bias, init_method=self.init_method, mask_type=self.mask_type, seq_len=self.seq_len)
