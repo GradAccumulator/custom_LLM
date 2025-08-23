@@ -41,7 +41,7 @@ if __name__ == '__main__':
             max_lr = 8e-5
             optimizer = Adam(model.params, max_lr, 0.9, 0.95, 1e-2, eps=1e-8, clip_grad=5)
             
-            scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.warmup_steps, decays.CosineDecay, scheduler_config.total_steps, min_lr = max_lr*0.1)
+            scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.effective_warmup_steps, decays.CosineDecay, scheduler_config.effective_total_steps, min_lr = max_lr*0.1)
         
         with timer("logger & tboard_manager 생성"):
             logger = Logger(logger_config.logs_dir)
