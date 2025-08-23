@@ -91,6 +91,14 @@ class SelfAttention(BaseModule):
             new.scale_qk = self.scale_qk.to(device, dtype)
         return new
     
+    def eval(self):
+        self.dropout.eval()
+    def train(self):
+        self.dropout.train()
+    @property
+    def mode(self):
+        return self.dropout._is_training
+    
     def clone(self):
         atten = SelfAttention(self.d_model, self.num_heads, device=self.device, dtype=self.dtype, use_bias=self.use_bias, init_method=self.init_method, mask_type=self.mask_type, seq_len=self.seq_len)
         atten.linear = self.linear.clone()

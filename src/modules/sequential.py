@@ -35,6 +35,7 @@ class Sequential:
         self.layers = layers
         self.device = device
         self.dtype = dtype
+        self._is_training = True
 
         for k in self.layers.keys():
             if hasattr(self.layers[k], 'to'):
@@ -108,3 +109,22 @@ class Sequential:
                     f'(state keys: {list(state.keys())})'
                 )
             self[k].load_state(s)
+            
+    def eval(self):
+        self._is_training = False
+        for layer in self.layers.values():
+            if hasattr(layer, 'eval'):
+                layer.eval()
+                
+    def train(self):
+        self._is_training = True
+        for layer in self.layers.values():
+            if hasattr(layer, 'train'):
+                layer.train()
+                
+    @property
+    def mode(self):
+        return 'train' if self._is_training else 'eval'
+    @property
+    def is_training(self):
+        return self._is_training
