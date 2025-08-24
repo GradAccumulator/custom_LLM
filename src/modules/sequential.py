@@ -1,6 +1,7 @@
 import torch
 from typing import overload, Any
 from src.utils.torch_utils import device_dtype_check
+from src.modules.to import To
 
 class Sequential:
     '''
@@ -39,7 +40,7 @@ class Sequential:
         self._is_training = True
 
         for k in self.layers.keys():
-            if hasattr(self.layers[k], 'to'):
+            if not isinstance(self.layers[k], To) and hasattr(self.layers[k], 'to'):
                 self.layers[k] = self.layers[k].to(device=self.device, dtype=self.dtype)
                 
         self.params_as_dict = {k:layer.parameters() for k,layer in self.layers.items() if hasattr(layer, 'parameters')}
@@ -66,7 +67,7 @@ class Sequential:
         seq.device = device if device is not None else self.device
         seq.dtype = dtype if dtype is not None else self.dtype
         for k in seq.layers.keys():
-            if hasattr(self.layers[k], 'to'):
+            if  not isinstance(seq.layers[k], To) and hasattr(self.layers[k], 'to'):
                 seq.layers[k] = seq.layers[k].to(device=device, dtype=dtype)
         return seq
     
@@ -78,7 +79,15 @@ class Sequential:
             raise IndexError(idx)
         return self.layers[idx]
     def __setitem__(self, idx:int, value:dict[str,Any]):
+        if idx not in self.layers.keys():
+            raise IndexError(idx)
         self.layers[idx] = value
+    def keys(self):
+        return self.layers.keys()
+    def values(self):
+        return self.layers.values()
+    def items(self):
+        return self.layers.items()
     
     def _shallow_copy(self):
         if self.is_dict:
@@ -140,7 +149,7 @@ class Sequential:
             f'Sequential(\n'
             f'    device={self.device},\n'
             f'    dtype={self.dtype},\n'
-            f'    layers={self.layers}\n'
-            ') : \n<<layers>>\n'
+            f'    <<layers>>\n    '
             +'\n    '.join([f'{i}: {module}' for i,module in self.layers.items()])
+            +'\n)'
         )

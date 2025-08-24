@@ -70,17 +70,17 @@ class SGD(BaseOptimizer):
                 self.update_velocity = self.update_velocity_without_dampening
 
     def update_velocity_with_dampening(self):
-        for k,p, in self.parameters_dict().items():
+        for k,p, in self.parameters_as_dict().items():
             self.v[k] = self._momentum*self.v[k] + self._dampening*p.grad
     def update_velocity_without_dampening(self):
-        for k,p, in self.parameters_dict().items():
+        for k,p, in self.parameters_as_dict().items():
             self.v[k] = self._momentum*self.v[k]+p.grad
     
     def gradients_nesterov(self) -> dict[str,torch.Tensor]:
         with torch.no_grad():
             self.update_velocity()
             gradients ={}
-            for k,p in self.parameters_dict().items():
+            for k,p in self.parameters_as_dict().items():
                 gradients[k] = p.grad + self._momentum*self.v[k]
         return gradients
     
@@ -90,7 +90,7 @@ class SGD(BaseOptimizer):
             return self.v
         
     def gradients_SGD(self):
-        return self.parameters_dict()
+        return self.parameters_as_dict()
 
     def step_with_wd(self):
         super().step_with_wd(self.compute_gradients_fn)

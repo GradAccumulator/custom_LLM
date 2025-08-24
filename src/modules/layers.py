@@ -1,8 +1,27 @@
 import torch
 from typing import overload, Any
 from src.utils.torch_utils import device_dtype_check
+from src.modules.to import To
 
 
+class LayerWrapper(dict):
+    def __init__(self, layer:dict[str, Any], idx:int):
+        super().__init__(layer)
+        self.idx = idx
+    def __repr__(self):
+        return (
+            f'Layers-LayerWrapper(idx={self.idx})(\n'
+            f'        <<modules>>\n        '+
+            f'\n        '.join(f'[{k}]:{v}' for k,v in self.items())+
+            f'\n)'
+        )
+        
+    @staticmethod
+    def wrapping_layers(layers:list[dict[str,Any]]):
+        for i in range(len(layers)):
+            layers[i] = LayerWrapper(layers[i], i)
+        return layers
+    
 class Layers:
     @overload
     def __init__(self, modules:dict[str, Any], num_layers, device='cpu', dtype=torch.float32):...
@@ -27,7 +46,7 @@ class Layers:
             modules = dict(enumerate(modules_list))
             self.is_dict = False
         
-        self.modules = modules
+        self.modules:dict[str, Any] = modules
         self.dtype = dtype
         self.device = device
         self.num_layers = num_layers
@@ -39,10 +58,11 @@ class Layers:
             for k,m in modules.items():
                 if hasattr(m, 'init_like'):
                     m = m.init_like()
-                if hasattr(m, 'to'):
+                if not isinstance(m, To) and hasattr(m, 'to'):
                     self.layers[i][k] = m.to(device=self.device, dtype=self.dtype)
                 else:
                     self.layers[i][k] = m
+            self.layers[i] = LayerWrapper(self.layers[i], i)
         self.cache_parameters()
     
     def cache_parameters(self):
@@ -72,16 +92,33 @@ class Layers:
         if idx>=len(self.layers):
             raise IndexError
         return self.layers[idx]
+    def __setitem__(self, idx:int, module:dict[str,Any]):
+        if idx>=len(self.layers):
+            raise IndexError
+        self.layers[idx] = module
     
     def to(self, device=None, dtype=None):
         device, dtype = device_dtype_check(device, dtype)
         if (self.device==device or device is None) and (self.dtype == dtype or dtype is None):
             return self
-        new = Layers(self.modules, self.num_layers, self.device, self.dtype)
+        new = self.clone()
         for i in range(self.num_layers):
-            for k,m in self.modules.items():
-                if hasattr(m, 'to'):
-                    new[i][k] = m.to(device=device or self.device, dtype=dtype or self.dtype)
+            for k in new.modules.keys():
+                if not isinstance(new[i][k], To) and hasattr(new[i][k], 'to'):
+                    new[i][k] = new[i][k].to(device=device or self.device, dtype=dtype or self.dtype)
+        return new
+    
+    def init_like(self):
+        if self.is_dict:
+            return Layers(self.modules, num_layers=self.num_layers, device=self.device, dtype=self.dtype)
+        return Layers(*list(self.modules.values()), num_layers=self.num_layers, device=self.device, dtype=self.dtype)
+    
+    def clone(self):
+        new = self.init_like()
+        for i in range(self.num_layers):
+            for k,m in self.layers[i].items():
+                if hasattr(m, 'clone'):
+                    new[i][k] = m.clone()
                 else:
                     new[i][k] = m
         return new
@@ -91,23 +128,23 @@ class Layers:
     
     def load_state(self, state):
         for i,layer in state.items():
-            for k,v in layer.items():
+            for k,m in layer.items():
                 if not hasattr(self[i][k], 'load_state'):
                     raise ValueError(
-                        '<<Layers.load_state>>\n'
-                    f"Layer {i}, Module {k} has not load_state method.\n"
-                    "Cannot load state for this layer.\n"
-                    f'(layer keys: {list(layer.keys())})'
-                )
-                self[i][k].load_state(v)
+                            '<<Layers.load_state>>\n'
+                        f"Layer {i}, Module {k} has not load_state method.\n"
+                        "Cannot load state for this layer.\n"
+                        f'(layer keys: {list(layer.keys())})'
+                    )
+                self[i][k].load_state(m)
                 
     def __repr__(self):
         return (
-            'Layers(\n'
-            f'    device={self.device},\n'
-            f'    dtype={self.dtype},\n'
-            f'    num_layers={self.num_layers},\n'
-            f'    modules={self.modules}\n'
-            ') : \n<<modules>>\n'
-            +'\n    '.join([f'{i}: {module}' for i,module in self.modules.items()])
+                    'Layers(\n'
+            f'        device={self.device},\n'
+            f'        dtype={self.dtype},\n'
+            f'        num_layers={self.num_layers},\n'
+            '        <<<modules>>>\n        '
+            +'\n        '.join([f'[{i}]: {module}' for i,module in self.modules.items()])
+            +'\n    )'
         )

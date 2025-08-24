@@ -62,7 +62,7 @@ class Trainer:
             f'effective_steps_per_epoch:{self.effective_steps_per_epoch}\n'
             f'max_grad_norm:{self.optimizer.max_grad_norm}\n'
             f'min_lr&max_lr:{self.scheduler.min_lr:.3g} to {self.scheduler.max_lr:.3g}\n'
-            f'optimizer:({self.optimizer})\n'
+            f'optimizer:{self.optimizer}\n'
         )
 
     def validate(self) -> tuple[float, float]:
@@ -156,7 +156,6 @@ class Trainer:
         self.optimizer.step()
         if self.scheduler:
             self.scheduler.step()
-        self.optimizer.zero_grad()
         if self.effective_step%self.config.log_interval==0:
             log = (
                 f'effective step:{self.effective_step}/{self.effective_steps_per_epoch}'.ljust(self.nstep)+
@@ -166,10 +165,12 @@ class Trainer:
             log_norms_and_lr = (
                 f'| grad_norm:{self.optimizer.prev_grad_norm.item():.4g}'.ljust(self.ngnorm)+
                 f'| weight_norm:{self.weight_norm.item():.4g}'.ljust(self.ngnorm-2)+
-                f'| lr:{self.scheduler.prev_lr:.5g}'
+                f'| lr:{self.scheduler.prev_lr:.5g}'.ljust(15)+
+                f'| qkvWAbsMean:{self.optimizer.parameters_as_dict()["qkv_weights"].grad[0].abs().mean().item():.4g}'
             )
             print(log+log_norms_and_lr)
             self.logger.write(datetime.datetime.now().isoformat()+" | "+log+'\n\t'+log_norms_and_lr)
+        self.optimizer.zero_grad()
         self.avg_loss_in_accum = 0
         self.total_acc_in_accum = 0
     
@@ -191,7 +192,7 @@ class Trainer:
         val_acc = torch.nan
         self.avg_loss_in_accum = 0
         self.total_acc_in_accum = 0
-        debug_fn = lambda:None
+        self.debug_fn = lambda:None
         for (train_x, train_label) in self.train_loader:
                 self.current_step+=1
                 
@@ -216,7 +217,7 @@ class Trainer:
                 self.step()
 
                 #debug
-                debug_fn()
+                self.debug_fn()
                 debug_out = self.debug(logits, train_x, train_label, loss, val_loss, val_acc)
                 if debug_out in [self.STOP, self.EXIT]:
                     return debug_out
@@ -278,8 +279,6 @@ class Trainer:
         print("checkpoint 저장 시작")
         state = self.state_dict()
         torch.save(state, self.config.TRAINER_SAVE_PATH)
-        if self.logger:
-            self.logger.save()
         print("checkpoint 저장 완료")
     @staticmethod
     def load_checkpoint(config, logger, loss_fn_type,  optimizer_type, model_type, dataloader_type, act_fn,scheduler_type=None, warmup_type=None, decay_type=None, tboard_manager=None):
@@ -312,5 +311,3 @@ class Trainer:
         print(f"last epoch: {self.current_epoch}")
         print(f"last step: {self.current_step}")
         print(f"last lr: {self.optimizer.lr}")
-        print(f"last train loss: {self.logger.moving_average('train', 1)}")
-        print(f"last validation loss: {self.logger.moving_average('validation', 1)}")

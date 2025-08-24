@@ -116,13 +116,6 @@ class Transformer:
         self._p = p
         self.recip_one_minus_p = 1/(1-self._p)
 
-    def get_norms(self)-> dict[str, torch.Tensor]:
-        norms = {}
-        norms['token_embedding'] = self.params['token_embedding'].norm(2)
-        norms['pos_embedding'] = self.params['pos_embedding'].norm(2)
-        norms['qkv_weights'] = self.params['qkv_weights'].norm(2, dim=(0, 1))
-        
-
     def _reset_params(self):
         self.params = {
             'qkv_weights': (torch.randn(self.wkqv_shape, device=self.device, dtype=torch.float32)*self.std_Wkqv).requires_grad_(),

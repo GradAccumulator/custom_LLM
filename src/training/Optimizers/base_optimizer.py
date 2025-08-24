@@ -29,7 +29,7 @@ class BaseOptimizer:
             self.clip_grad = False
         
 
-    def parameters_dict(self):
+    def parameters_as_dict(self):
         return self._cached_params_as_dict
         
     def parameters(self):
@@ -37,7 +37,7 @@ class BaseOptimizer:
     
     @property
     def params(self):
-        return self.parameters_dict()
+        return self.parameters_as_dict()
     
     @property
     def weight_decay(self):
@@ -45,7 +45,7 @@ class BaseOptimizer:
     @weight_decay.setter
     def weight_decay(self, wd):
         self._wd = wd
-        parameters = self.parameters_dict()
+        parameters = self.parameters_as_dict()
         if wd == 0:
             self.step = self.step_with_none
             self._params = {key:parameters[key] for key in parameters.keys() if self._ld and key not in self._ld.keys()}
@@ -93,9 +93,9 @@ class BaseOptimizer:
                 
     def zero_grad(self):
         with torch.no_grad():
-            params = self.parameters_dict()
+            params = self.parameters_as_dict()
             for p in params.values():
-                p.grad.zero_()
+                p.grad = None
 
     def parameters_append(self, **kargs):
         if self._wd != 0:

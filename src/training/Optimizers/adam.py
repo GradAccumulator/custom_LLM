@@ -34,7 +34,7 @@ class Adam(BaseOptimizer):
 
     def update_mv(self) -> dict[str, torch.Tensor]:
         self.t += 1
-        params = self.parameters_dict()
+        params = self.parameters_as_dict()
         adam_updated = {}
         for key in params.keys():
             self.m[key] = self.b1*self.m[key] + (1-self.b1)*params[key].grad
@@ -63,7 +63,7 @@ class Adam(BaseOptimizer):
     def state_dict(self):
         m = {}
         v = {}
-        for key in self.parameters_dict().keys():
+        for key in self.parameters_as_dict().keys():
             m[key] = self.m[key].cpu().detach().clone()
             v[key] = self.v[key].cpu().detach().clone()
         state = super().state_dict()
@@ -78,9 +78,7 @@ class Adam(BaseOptimizer):
     def __repr__(self):
         return (
             f"Adam(\n"
-            f'    device={self.device},\n'
-            f'    dtype={self.dtype},\n'
-            f'    parameters={self.parameters},\n'
+            f'    parameter keys={list(self.parameters_as_dict().keys())},\n'
             f'    lr={self.lr},\n'
             f'    beta1={self.b1},\n'
             f'    beta2={self.b2},\n'
