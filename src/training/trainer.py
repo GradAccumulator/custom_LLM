@@ -32,9 +32,10 @@ class Trainer:
         self.effective_steps_per_epoch = math.ceil(self.config.steps_per_epoch/self.grad_accumulation)
         self.nstep = 27
         self.nloss = 21
-        self.nacc = 28
+        self.nperp = 28
         self.ngnorm = 21
         self.effective_step = 0
+        self.train_perp, self.val_perp = torch.nan, torch.nan
         self.validation_interval = self.config.validation_interval*self.grad_accumulation
         self.logger.write(
             f'<<{datetime.datetime.now().isoformat()[:-7]}>>\n'
@@ -48,9 +49,8 @@ class Trainer:
             f'optimizer:{self.optimizer}\n'
         )
 
-    def validate(self) -> tuple[float, float]:
+    def validate(self) -> float:
         avg_loss = 0.0
-        avg_acc = 0
         clear_memory()
         self.model.eval()
         with torch.no_grad():
@@ -58,19 +58,19 @@ class Trainer:
                 logits = self.model(val_x)
                 size_rate = self.val_loader.current_size_rate()
                 avg_loss += self.loss_fn(logits,val_label).item()*size_rate
-                avg_acc += self.acc_fn(logits.view(-1, logits.size(-1)), val_label.view(-1)).item()*size_rate
         clear_memory()
         self.model.train()
+        self.val_perp = torch.e**avg_loss
         log = f'effective step:{self.effective_step}/{self.effective_steps_per_epoch}'.ljust(self.nstep)+ \
             f'| val   loss:{avg_loss:.4g}'.ljust(self.nloss)+ \
-            f'| val   accuracy:{avg_acc*100:.3g}%'.ljust(self.nacc)
+            f'| val   perplexity:{self.val_perp:.6g}'.ljust(self.nperp)
         print(Fore.GREEN+log+'| validated!!'+Style.RESET_ALL)
         self.logger.write(datetime.datetime.now().isoformat()+" | "+log+
             "\n\t| validated!!"
         )
-        return (avg_loss, avg_acc*100)
+        return avg_loss
     
-    def debug(self, logits, train_x, train_label, loss, val_loss, val_acc, *args, **kwargs) -> tuple[float, float]|Literal["STOP"]|Literal["EXIT"]:
+    def debug(self, logits, train_x, train_label, loss, val_loss, *args, **kwargs) -> float|Literal["STOP"]|Literal["EXIT"]:
         if msvcrt.kbhit():
             key = msvcrt.getch().lower()
             #quit training(not saves checkpoint)
@@ -99,7 +99,7 @@ class Trainer:
             #save
             elif key == b's':    
                 self.save_checkpoint()
-        return (val_loss, val_acc)
+        return val_loss
 
     @property
     def grad_accumulation(self):
@@ -112,19 +112,19 @@ class Trainer:
         else:
             self.step = self.step_with_no_term
 
-    def tboard_update_loss(self, loss, val_loss, logits, label, val_acc, total_acc_in_accum):
+    def tboard_update_loss(self, loss, val_loss, logits, label, total_acc_in_accum):
         if self.tboard_manager and (self.current_step%self.config.tboard_update_interval==0 or self.current_step==1):
             with torch.no_grad():
-                avg_acc = (total_acc_in_accum/self.grad_accumulation).item()*100
                 self.tboard_manager.add_scalars(
-                    ('loss/train'       , loss              , self.effective_step, True),
-                    ('loss/validation'  , val_loss          , self.effective_step, True),
-                    ('lr'               , self.optimizer.lr , self.effective_step, False),
-                    ("acc/train"        , avg_acc           , self.effective_step, True),
-                    ("acc/validation"   , val_acc           , self.effective_step, True)
+                    ('loss/train'            , loss              , self.effective_step, True ),
+                    ('loss/validation'       , val_loss          , self.effective_step, True ),
+                    ('lr'                    , self.optimizer.lr , self.effective_step, False),
+                    ("perplexity/train"      , self.train_perp   , self.effective_step, True ),
+                    ("perplexity/validation" , self.val_perp     , self.effective_step, True )
                 )
-                        
+                
     def check_nan_and_inf(self, tensor:torch.Tensor, name):
+        
         if tensor.isnan().any():
             print(f"[Trainer] {name} is nan!!!!!")
             option = get_option('debuging? or exit? or clipping?', ['d', 'e', 'c'])
@@ -153,10 +153,11 @@ class Trainer:
         if self.scheduler:
             self.scheduler.step()
         if self.effective_step%self.config.log_interval==0:
+            self.train_perp = torch.e**self.avg_loss_in_accum
             log = (
                 f'effective step:{self.effective_step}/{self.effective_steps_per_epoch}'.ljust(self.nstep)+
                 f'| train loss:{self.avg_loss_in_accum:.4g}'.ljust(self.nloss)+
-                f'| train accuracy:{(self.total_acc_in_accum/self.grad_accumulation).item()*100:.3g}%'.ljust(self.nacc)+' '
+                f'| train perplexity:{self.train_perp:.6g}'.ljust(self.nperp)+' '
             )
             log_norms_and_lr = (
                 f'| grad_norm:{self.optimizer.prev_grad_norm.item():.4g}'.ljust(self.ngnorm)+
@@ -185,7 +186,6 @@ class Trainer:
     def train_one_epoch(self):
         self.model.train()
         val_loss = torch.nan
-        val_acc = torch.nan
         self.avg_loss_in_accum = 0
         self.total_acc_in_accum = 0
         self.debug_fn = lambda:None
@@ -193,7 +193,7 @@ class Trainer:
                 self.current_step+=1
                 
                 if self.validation and (self.current_step%self.validation_interval==0 or self.current_step==1):
-                    val_loss, val_acc = self.validate()
+                    val_loss= self.validate()
                 
                 logits, loss = self.forward_and_compute_loss(train_x, train_label)
                 loss = loss/self.grad_accumulation
@@ -203,21 +203,19 @@ class Trainer:
                 
                 #record loss and acc
                 self.avg_loss_in_accum += loss.item()
-                with torch.no_grad():
-                    self.total_acc_in_accum += self.acc_fn(logits.view(-1, logits.size(-1)), train_label.view(-1))
                 
                 #tboard log
-                self.tboard_update_loss(self.avg_loss_in_accum, val_loss, logits, train_label, val_acc, self.total_acc_in_accum)
+                self.tboard_update_loss(self.avg_loss_in_accum, val_loss, logits, train_label, self.total_acc_in_accum)
                 
                 #step
                 self.step()
 
                 #debug
                 self.debug_fn()
-                debug_out = self.debug(logits, train_x, train_label, loss, val_loss, val_acc)
+                debug_out = self.debug(logits, train_x, train_label, loss, val_loss)
                 if debug_out in [self.STOP, self.EXIT]:
                     return debug_out
-                val_loss, val_acc = debug_out
+                val_loss = debug_out
         return False
     def train(self):
         try:
