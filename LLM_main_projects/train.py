@@ -48,7 +48,12 @@ if __name__ == '__main__':
             tboard_manager = TBoardManager(tboard_manager_config.logs_dir, window_size=20)
         
         with timer("loss 함수& trainer 생성"):
-            loss_fn = CrossEntropyLoss(logit_input=True, ignore_label_indices=[0], weight_device='cuda')
+            loss_fn = CrossEntropyLoss(
+                logit_input=True, 
+                ignore_label_indices=[0], 
+                weight_device='cuda',
+                stability_scale=0.1
+            )
             
             trainer_config = TrainerConfig(
                 model=model,
