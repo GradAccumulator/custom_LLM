@@ -369,7 +369,7 @@ class Transformer:
     def decode(self, x:torch.Tensor):
         return self.tokenizer.decode(x)
     
-    def encode(self, x:list[str],*, for_eval=False, is_dataset=False, max_length=10000) -> torch.Tensor:
+    def encode(self, x:list[str],*, is_dataset=False, max_length=10000) -> torch.Tensor:
         if not is_dataset:
             return torch.tensor(self.tokenizer.encode(x, seq_len=self.seq_len, is_dataset=False, max_length=max_length), device=self.device)
         input,label = self.tokenizer.encode(x, seq_len=self.seq_len, is_dataset=True, max_length=max_length)

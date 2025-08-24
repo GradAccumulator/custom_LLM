@@ -106,6 +106,9 @@ class Layers:
             for k in new.modules.keys():
                 if not isinstance(new[i][k], To) and hasattr(new[i][k], 'to'):
                     new[i][k] = new[i][k].to(device=device or self.device, dtype=dtype or self.dtype)
+        for k in new.modules.keys():
+            if hasattr(new[k], 'to'):
+                new.modules[k] = new.modules[k].to(device=device or self.device, dtype=dtype or self.dtype)
         return new
     
     def init_like(self):

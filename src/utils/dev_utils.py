@@ -33,6 +33,15 @@ def get_valid_posnumber(log:str, return_type:int|float):
 def ask_options(log:str, options:list[str]):
     '''options는 무조건 소문자로 해야함'''
     return input(log).strip().lower() in options
+def get_option(msg, options:list[str]):
+    '''
+    prints {msg} {options}: 
+    '''
+    while True:
+        out = input(f"{msg} {options}: ").strip().lower()
+        if out in options:
+            return out
+        print(f"{options} 안의 값을 입력하세요.")
 
 def write(s:str, base_dir, *dir_and_file_names, encoding='utf-8', binary=False, plus=False):
     with writing(base_dir, *dir_and_file_names, encoding=encoding, binary=binary, plus=plus) as f:

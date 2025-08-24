@@ -4,3 +4,4 @@ from . import dev_utils
 from .logging.logger import Logger
 from .logging.tboard_manager import TBoardManager
 from .logging.saver import Saver
+from . import types

@@ -3,6 +3,7 @@ from src.utils.torch_utils import device_dtype_check
 
 class To:
     def __init__(self, device='cpu', dtype=torch.float32):
+        device,dtype = device_dtype_check(device, dtype)
         self.device = device
         self.dtype = dtype
         

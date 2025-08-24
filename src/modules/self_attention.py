@@ -7,7 +7,8 @@ from .dropout import Dropout
 from src.utils.torch_utils import device_dtype_check
 
 class SelfAttention(BaseModule):
-    def __init__(self, d_model, num_heads,*,device='cpu', dtype=torch.float32, use_bias=False, init_method='Xavier', mask_type='causal', seq_len=None, scale_qk_value=None, learnable_scale_qk=False, dropout_p=0.1):
+    def __init__(
+        self, d_model, num_heads,*,device='cpu', dtype=torch.float32, use_bias=False, init_method='Xavier', mask_type='causal', mask_dtype=torch.float16, seq_len=None, scale_qk_value=None, learnable_scale_qk=False, dropout_p=0.1):
         if d_model%num_heads != 0:
             raise AttributeError("d_model과 head 개수가 맞지 않습니다.")
         super().__init__(device, dtype)
@@ -18,14 +19,14 @@ class SelfAttention(BaseModule):
         self.init_method = init_method.lower()
         self.seq_len = seq_len
         self.mask_type = mask_type
-        self.softmax = Softmax(dim=-1, dtype=self.dtype)
+        self.softmax = Softmax(dim=-1)
         self.dropout = dropout_p>0
+        self.mask_dtype = mask_dtype
         if self.dropout:
             self.dropout = Dropout(dropout_p)
         
         if self.mask_type=='causal' and self.seq_len is not None:
-            self.cached_mask = torch.full((self.seq_len, self.seq_len), float('-inf'), device=self.device, dtype=self.dtype)
-            self.cached_mask = self.cached_mask.triu(diagonal=1)
+            self.cached_mask = torch.full((self.seq_len, self.seq_len), float('-inf'), device=self.device, dtype=mask_dtype).triu(diagonal=1)
             
         self.recip_root_d_k = 1/(self.d_head**0.5)
         self.scale_qk_value = scale_qk_value
@@ -102,7 +103,7 @@ class SelfAttention(BaseModule):
         return self.dropout._is_training
     
     def clone(self):
-        atten = SelfAttention(self.d_model, self.num_heads, device=self.device, dtype=self.dtype, use_bias=self.use_bias, init_method=self.init_method, mask_type=self.mask_type, seq_len=self.seq_len)
+        atten = self.init_like()
         atten.linear = self.linear.clone()
         if self.scale_qk_value is not None:
             atten.scale_qk = self.scale_qk.clone()
@@ -120,6 +121,7 @@ class SelfAttention(BaseModule):
             scale_qk_value      =self.scale_qk_value, 
             learnable_scale_qk  =hasattr(self, 'scale_qk') and self.scale_qk.learnable, 
             dropout_p           =self.dropout.p if self.dropout else 0.0,
+            mask_dtype          =self.mask_dtype
         )
     
     def state_dict(self):

@@ -1,6 +1,6 @@
 import torch
 import msvcrt
-from src.utils.dev_utils import timer, print_log
+from src.utils.dev_utils import timer, print_log, get_option, get_valid_posnumber
 from src.utils.processing.data_processing import clear_memory
 import bdb
 import torchmetrics
@@ -9,23 +9,6 @@ import math
 from colorama import Fore, Style, init as colorama_init
 import datetime
 colorama_init()
-
-def alert(msg):
-    from pygame import mixer
-    from win10toast import ToastNotifier
-    from time import sleep
-    import threading
-    toaster = ToastNotifier()
-    print(msg)
-    mixer.init()
-    mixer.music.load("assets/bigdata/999C40345D542B9E23.mp3")
-    toaster.show_toast("Warning!!!!!", msg, duration=5)
-    for _ in range(16):
-        mixer.music.play()
-        if msvcrt.kbhit() and msvcrt.getch() == b'q':
-            break
-        sleep(16)
-
 
 class Trainer:
     STOP = "STOP"
@@ -141,14 +124,27 @@ class Trainer:
                     ("acc/validation"   , val_acc           , self.effective_step, True)
                 )
                         
-    def check_nan_and_inf(self, tensor, name):
+    def check_nan_and_inf(self, tensor:torch.Tensor, name):
         if tensor.isnan().any():
-            alert(f"[Trainer] {name} is nan!!!!!")
-            raise ValueError(f"[Trainer] {name} is nan!!!!!")
+            print(f"[Trainer] {name} is nan!!!!!")
+            option = get_option('debuging? or exit? or clipping?', ['d', 'e', 'c'])
+            if option == 'd':
+                breakpoint()
+            elif option == 'e':
+                raise ValueError(f"[Trainer] {name} is nan!!!!!")
+            elif option == 'c':
+                tensor = tensor.nan_to_num()
         
         elif tensor.isinf().any():
-            alert(f"[Trainer] {name} is inf!!!!!")
-            raise ValueError(f"[Trainer] {name} is inf!!!!!")
+            print(f"[Trainer] {name} is inf!!!!!")
+            option = get_option('debuging? or exit? or clipping?', ['d', 'e', 'c'])
+            if option == 'd':
+                breakpoint()
+            elif option == 'e':
+                raise ValueError(f"[Trainer] {name} is inf!!!!!")
+            elif option == 'c':
+                num = get_valid_posnumber("input a number to clip: ", float)
+                tensor.clamp_(-num, num)
 
     def step_and_logging(self):
         self.effective_step += 1

@@ -6,6 +6,7 @@ import traceback
 #my packages
 import src.utils.dev_utils as dev_utils
 from PATHES import PATHES
+from typing import overload
 
 process_bottleneck = ctypes.CDLL(dev_utils.join(PATHES.SRC_C_MODULES, 'dlls', "seq_windows.dll"))
 
@@ -66,7 +67,16 @@ class koTokenizer:
                 out.append(x + ([self.pad_id] * (seq_len-len(x))))
         return out
     
-    def encode(self, x:str|list[str], bos=True, eos=True, seq_len=None, is_dataset=False, stride_rate:float=0.75, max_length=1000000) -> list[int]|tuple[list[int],list[int]] | list[list[int]]|tuple[list[list[int]],list[list[int]]]:
+    @overload
+    def encode(self, x:str, bos=True, eos=True, seq_len=None, is_dataset=False, stride_rate:float=0.75, max_length=1000000) -> list[int]: ...
+    @overload
+    def encode(self, x:list[str], bos=True, eos=True, seq_len=None, is_dataset=False, stride_rate:float=0.75, max_length=1000000) -> list[list[int]]: ...
+    @overload
+    def encode(self, x:list[str], bos=True, eos=True, seq_len=None, is_dataset=True, stride_rate:float=0.75, max_length=1000000) -> tuple[np.ndarray[int,list[int]],np.ndarray[int,list[int]]]: ...
+    @overload
+    def encode(self, x:str, bos=True, eos=True, seq_len=None, is_dataset=True, stride_rate:float=0.75, max_length=1000000) -> tuple[np.ndarray[int],np.ndarray[int]]: ...
+    
+    def encode(self, x, bos=True, eos=True, seq_len=None, is_dataset=False, stride_rate:float=0.75, max_length=1000000):
         '''
         입력은 (L), 출력은 (L, seq_len)\t 
         #seq_len==None이면 각자 문장 크기\n
