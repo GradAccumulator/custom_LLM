@@ -4,6 +4,7 @@ check_my_transformer_size/
 .vscode/
 **/*.json
 assets/
+!assets/configs/
 c_modules/
 __pycache__/
 analysis/
