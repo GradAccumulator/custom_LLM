@@ -2,6 +2,7 @@ import torch
 from typing import overload, Any
 from src.utils.torch_utils import device_dtype_check
 from src.modules.to import To
+from .base_module import BaseModule
 
 
 class LayerWrapper(dict):
@@ -15,21 +16,26 @@ class LayerWrapper(dict):
             f'\n        '.join(f'[{k}]:{v}' for k,v in self.items())+
             f'\n)'
         )
-        
+    
+    def __getitem__(self, key):
+        return super().__getitem__(str(key))
+    def __setitem__(self, key, value):
+        super().__setitem__(str(key), value)
+    
     @staticmethod
-    def wrapping_layers(layers:list[dict[str,Any]]):
+    def wrap_layers(layers:list[dict[str,Any]]):
         for i in range(len(layers)):
             layers[i] = LayerWrapper(layers[i], i)
         return layers
-    
-class Layers:
+
+class Layers(BaseModule):
     @overload
     def __init__(self, modules:dict[str, Any], num_layers, device='cpu', dtype=torch.float32):...
     @overload
     def __init__(self, *modules, num_layers, device='cpu', dtype=torch.float32):...
     @overload
     def __init__(self, *, num_layers, device='cpu', dtype=torch.float32, **modules):...
-    def __init__(self, *modules_list:dict[str]|Any, num_layers, device='cpu', dtype=torch.float32, **modules_dict):
+    def __init__(self, *modules_list, num_layers, device='cpu', dtype=torch.float32, **modules_dict):
         if modules_dict and modules_list:
             raise ValueError('modules_dict와 modules_list를 동시에 전달할 수 없습니다.')
         elif not modules_dict and not modules_list:
@@ -43,17 +49,18 @@ class Layers:
             modules = modules_dict
             self.is_dict = True
         else:
-            modules = dict(enumerate(modules_list))
+            modules = {}
+            for i,m in enumerate(modules_list):
+                modules[str(i)] = m
             self.is_dict = False
         
+        super().__init__(device=device, dtype=dtype)
         self.modules:dict[str, Any] = modules
-        self.dtype = dtype
-        self.device = device
         self.num_layers = num_layers
         self._set_layers(modules)
 
     def _set_layers(self, modules:dict):
-        self.layers = [{} for _ in range(self.num_layers)]
+        self.layers:list[LayerWrapper] = [{} for _ in range(self.num_layers)]
         for i in range(self.num_layers):
             for k,m in modules.items():
                 if hasattr(m, 'init_like'):
@@ -62,22 +69,7 @@ class Layers:
                     self.layers[i][k] = m.to(device=self.device, dtype=self.dtype)
                 else:
                     self.layers[i][k] = m
-            self.layers[i] = LayerWrapper(self.layers[i], i)
-        self.cache_parameters()
-    
-    def cache_parameters(self):
-        self.params_as_dict = {}
-        for k,m in self.modules.items():
-            if hasattr(m, 'parameters_as_dict'):
-                self.params_as_dict[k] = m.params_as_dict()
-            elif hasattr(m, 'parameters'):
-                self.params_as_dict[k] = m.parameters()
-        self.params_as_list = [p for module in self.modules.values() if hasattr(module, 'parameters') for p in module.parameters()]
-
-    def parameters_as_dict(self):
-        return self.params_as_dict
-    def parameters(self):
-        return self.params_as_list
+            self.set_layer(i, self.layers[i])
     
     def forward(self, x):
         for layer in self.layers:
@@ -88,14 +80,24 @@ class Layers:
     def __call__(self, x):
         return self.forward(x)
     
-    def __getitem__(self, idx:int) -> dict[str,Any]:
+    def __getitem__(self, idx:int|str) -> dict[str,Any]:
         if idx>=len(self.layers):
             raise IndexError
         return self.layers[idx]
-    def __setitem__(self, idx:int, module:dict[str,Any]):
+        
+    def set_module(self, idx:int, key:str, module):
         if idx>=len(self.layers):
             raise IndexError
-        self.layers[idx] = module
+        self.layers[idx][key] = module
+        if isinstance(module, BaseModule):
+            for k,p in module._parameters.items():
+                self._parameters[f'layers[{idx}][{key}]({self.layers[idx][key].__class__.__name__}).{k}'] = p
+    def set_layer(self, idx:int, layer:dict[str,Any]):
+        if idx>=len(self.layers):
+            raise IndexError
+        self.layers[idx] = LayerWrapper(layer, idx)
+        for key,module in layer.items():
+            self.set_module(idx, key, module)
     
     def to(self, device=None, dtype=None):
         device, dtype = device_dtype_check(device, dtype)
@@ -105,7 +107,7 @@ class Layers:
         for i in range(self.num_layers):
             for k in new.modules.keys():
                 if not isinstance(new[i][k], To) and hasattr(new[i][k], 'to'):
-                    new[i][k] = new[i][k].to(device=device or self.device, dtype=dtype or self.dtype)
+                    new.set_module(i, k, new.layers[i][k].to(device=device or self.device, dtype=dtype or self.dtype))
         for k in new.modules.keys():
             if hasattr(new[k], 'to'):
                 new.modules[k] = new.modules[k].to(device=device or self.device, dtype=dtype or self.dtype)

@@ -20,9 +20,6 @@ class LayerNorm(BaseModule):
     def __call__(self, x):
         return self.forward(x)
     
-    def parameters(self):
-        return [self.gamma, self.beta]
-    
     def to(self, device=None, dtype=None):
         device, dtype = device_dtype_check(device, dtype)
         if (self.device==device or device is None) and (self.dtype==dtype or dtype is None):

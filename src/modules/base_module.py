@@ -15,7 +15,7 @@ class BaseModule(object):
     def __init__(self, device='cpu', dtype=torch.float32):
         self.device = device
         self.dtype  = dtype
-        self._parameters = {}
+        self._parameters:dict[str,torch.Tensor] = {}
         
     def state_key_check_with_raise(self, state_keys, keys, cls,func_name):
         '''state_keys에서 ㅏkeys에 없는게 있으면 raise 함'''
@@ -44,16 +44,25 @@ class BaseModule(object):
                 raise ValueError(f'Invalid weight initialization: {init_type}')
             
     def __setattr__(self, name, value):
-        if isinstance(value, torch.Tensor):
+        if isinstance(value, torch.Tensor) and value.requires_grad:
+            if not value.is_leaf:
+                raise ValueError(f'{self.__class__.__name__}: {name} is set to requires_grad=True, but is not a leaf tensor.')
             self._parameters[name] = value
-        elif isinstance(value, BaseModule):
+        elif isinstance(value, BaseModule) and not isinstance(value, self.__class__):
             for k,v in value._parameters.items():
                 self._parameters[f'{name}.{k}'] = v
+        elif isinstance(value, dict):
+            for k,v in value.items():
+                if isinstance(v, BaseModule):
+                    for param_name,param in v._parameters.items():
+                        self._parameters[f'{name}[{k}].{param_name}'] = param
         super().__setattr__(name, value)
-        
     
     def parameters(self):
         return list(self._parameters.values())
     
     def parameters_as_dict(self):
+        return self._parameters
+    
+    def named_parameters(self):
         return self._parameters

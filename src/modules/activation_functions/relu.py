@@ -36,9 +36,6 @@ class PReLU(BaseModule, ActivationFunction):
     def __call__(self, x:torch.Tensor):
         return self.forward(x)
     
-    def parameters(self):
-        return [self._a]
-    
     @property
     def a(self):
         return self._a

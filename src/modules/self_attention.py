@@ -41,10 +41,6 @@ class SelfAttention(BaseModule):
     def reset_params(self):
         self.W_qkv = Linear(self.d_model, self.num_heads*self.d_head*3, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
         self.W_o = Linear(self.num_heads*self.d_head, self.d_model, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
-        self.cached_parameters_as_dict = {
-            'qkv_weight': self.W_qkv.weight,
-            'qkv_bias': self.W_qkv.bias or None,
-        }
     
     @property
     def use_bias(self):
@@ -84,17 +80,10 @@ class SelfAttention(BaseModule):
         Q,K,V = self._get_qkv(x)
         atten_out = self._attention(Q, K, V, x.shape[1]).transpose(1,2).reshape(x.shape[0], x.shape[1], self.num_heads*self.d_head)
         out = self.W_o(atten_out)
-        return atten_out
+        return out
     
     def __call__(self, x):
         return self.forward(x)
-    
-    def parameters(self):
-        params = self.W_qkv.parameters()
-        if hasattr(self, 'scale_qk') and self.scale_qk.learnable:
-            params += self.scale_qk.parameters()
-        params += self.W_o.parameters()
-        return params
     
     def to(self, device=None, dtype=None):
         device, dtype = device_dtype_check(device, dtype)

@@ -16,7 +16,6 @@ class Scale(BaseModule):
         else:
             self.scale = torch.tensor(value, device=self.device, dtype=self.dtype, requires_grad=self.learnable)
         if self.learnable:
-            self.parameters = self._parameters
             self.clone = self._clone
             self.init_like = self._init_like
     
@@ -29,9 +28,6 @@ class Scale(BaseModule):
         return self.forward(other)
     def __rmul__(self, other):
         return self.forward(other)
-    
-    def _parameters(self):
-        return [self.scale]
     
     def to(self, device=None, dtype=None):
         device, dtype = device_dtype_check(device, dtype)

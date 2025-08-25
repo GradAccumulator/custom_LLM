@@ -2,8 +2,9 @@ import torch
 from typing import overload, Any
 from src.utils.torch_utils import device_dtype_check
 from src.modules.to import To
+from .base_module import BaseModule
 
-class Sequential:
+class Sequential(BaseModule):
     '''
     sequential에 넣을 클래스에 있어야하는거 \n
     to() : device, dtype 옵션 있으면, 그리고 device dtype 둘 다 있어야함. 안써도 받아야함\n
@@ -16,17 +17,17 @@ class Sequential:
     @overload
     def __init__(self, *layers, device='cpu', dtype=torch.float32):...
     @overload
-    def __init__(self, layers:dict, device='cpu', dtype=torch.float32):...
-    def __init__(self, *layers_list:tuple, device='cpu', dtype=torch.float32,**layers_dict:dict):
+    def __init__(self, layers:tuple|list, device='cpu', dtype=torch.float32):...
+    def __init__(self, *layers_list, device='cpu', dtype=torch.float32,**layers_dict):
         if layers_dict and layers_list:
             raise ValueError('layers_dict와 layers_list를 동시에 전달할 수 없습니다.')
         elif not layers_dict and not layers_list:
-            raise ValueError('layers_dict와 layers_list가 모두 비어있습니다.')
+            raise ValueError('layers_dict and layers_list are empty.')
         elif isinstance(layers_list[0], dict):
-            self.is_dict = True
-            layers = layers_list[0]
             if len(layers_list) > 1:
                 raise ValueError('layers를 딕셔너리로 전달할 때는 여러개의 인자를 전달할 수 없습니다.')
+            self.is_dict = True
+            layers = layers_list[0]
         elif layers_dict:
             layers = layers_dict
             self.is_dict = True
@@ -34,17 +35,13 @@ class Sequential:
             layers = dict(enumerate(layers_list))
             self.is_dict = False
         
+        super().__init__(device=device, dtype=dtype)
         self.layers = layers
-        self.device = device
-        self.dtype = dtype
         self._is_training = True
 
         for k in self.layers.keys():
             if not isinstance(self.layers[k], To) and hasattr(self.layers[k], 'to'):
                 self.layers[k] = self.layers[k].to(device=self.device, dtype=self.dtype)
-                
-        self.params_as_dict = {k:layer.parameters() for k,layer in self.layers.items() if hasattr(layer, 'parameters')}
-        self.params_as_list = [p for layer in self.layers.values() if hasattr(layer, 'parameters') for p in layer.parameters()]
     
     def forward(self, x):
         for layer in self.layers.values():
@@ -53,11 +50,6 @@ class Sequential:
     
     def __call__(self, x):
         return self.forward(x)
-    
-    def parameters_as_dict(self):
-        return self.params_as_dict
-    def parameters(self):
-        return self.params_as_list
     
     def to(self, device=None, dtype=None):
         device, dtype = device_dtype_check(device, dtype)
@@ -78,9 +70,15 @@ class Sequential:
         if idx not in self.layers.keys():
             raise IndexError(idx)
         return self.layers[idx]
-    def __setitem__(self, idx:int, value:dict[str,Any]):
+    def __setitem__(self, idx:int|str, value:dict[str,Any]):
         if idx not in self.layers.keys():
-            raise IndexError(idx)
+            raise KeyError(idx)
+        if isinstance(value, BaseModule):
+            for k in self._parameters.keys():
+                if k[k.find('[')+1:k.find(']')] == str(idx):
+                    self._parameters.pop(k)
+            for k,v in value._parameters.items():
+                self._parameters[f'layers[{idx}].{k}'] = v
         self.layers[idx] = value
     def keys(self):
         return self.layers.keys()
