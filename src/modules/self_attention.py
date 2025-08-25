@@ -8,21 +8,24 @@ from src.utils.torch_utils import device_dtype_check
 
 class SelfAttention(BaseModule):
     def __init__(
-        self, d_model, num_heads,*,device='cpu', dtype=torch.float32, use_bias=False, init_method='Xavier', mask_type='causal', mask_dtype=torch.float16, seq_len=None, scale_qk_value=None, learnable_scale_qk=False, dropout_p=0.1):
-        if d_model%num_heads != 0:
+        self, d_model, num_heads, d_head=None,*,device='cpu', dtype=torch.float32, use_bias=False, init_method='Xavier', mask_type='causal', mask_dtype=torch.float16, seq_len=None, scale_qk_value=None, learnable_scale_qk=False, dropout_p=0.1):
+        if d_model%num_heads != 0 and d_head is None:
             raise AttributeError("d_model과 head 개수가 맞지 않습니다.")
+        if d_head is None:
+            self.d_head = d_model//num_heads
+        else:
+            self.d_head = d_head
         super().__init__(device, dtype)
         self.d_model = d_model
         self.num_heads = num_heads
-        self.d_head = d_model//num_heads
         self._use_bias = use_bias
         self.init_method = init_method.lower()
         self.seq_len = seq_len
         self.mask_type = mask_type
         self.softmax = Softmax(dim=-1)
-        self.dropout = dropout_p>0
+        self.use_dropout = dropout_p>0
         self.mask_dtype = mask_dtype
-        if self.dropout:
+        if self.use_dropout:
             self.dropout = Dropout(dropout_p)
         
         if self.mask_type=='causal' and self.seq_len is not None:
@@ -36,7 +39,12 @@ class SelfAttention(BaseModule):
         self.reset_params()
     
     def reset_params(self):
-        self.linear = Linear(self.d_model, self.num_heads*self.d_head*3, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
+        self.W_qkv = Linear(self.d_model, self.num_heads*self.d_head*3, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
+        self.W_o = Linear(self.num_heads*self.d_head, self.d_model, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
+        self.cached_parameters_as_dict = {
+            'qkv_weight': self.W_qkv.weight,
+            'qkv_bias': self.W_qkv.bias or None,
+        }
     
     @property
     def use_bias(self):
@@ -52,7 +60,7 @@ class SelfAttention(BaseModule):
         input shape:(B, seq_len, d_model)
         output shape:(B, num_heads, seq_len, d_head), (Q,K,V)
         '''
-        Q,K,V = self.linear(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head*3).transpose(1, 2).split(self.d_head, dim=-1)
+        Q,K,V = self.W_qkv(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head*3).transpose(1, 2).split(self.d_head, dim=-1)
         if self.scale_qk_value is not None:
             return (Q*self.scale_qk, K*self.scale_qk,V)
         return (Q,K,V)
@@ -64,7 +72,7 @@ class SelfAttention(BaseModule):
         else:
             masked = scores + self._make_mask(seq_len, dtype=scores.dtype)
         weight = self.softmax(masked)
-        if self.dropout:
+        if self.use_dropout:
             weight = self.dropout(weight)
         return (weight@V)
     
@@ -74,22 +82,25 @@ class SelfAttention(BaseModule):
         output shape:(batch, seq_len, d_model)
         '''
         Q,K,V = self._get_qkv(x)
-        atten_out = self._attention(Q, K, V, x.shape[1]).transpose(1,2)
+        atten_out = self._attention(Q, K, V, x.shape[1]).transpose(1,2).reshape(x.shape[0], x.shape[1], self.num_heads*self.d_head)
+        out = self.W_o(atten_out)
         return atten_out
     
     def __call__(self, x):
         return self.forward(x)
     
     def parameters(self):
-        params = self.linear.parameters()
+        params = self.W_qkv.parameters()
         if hasattr(self, 'scale_qk') and self.scale_qk.learnable:
             params += self.scale_qk.parameters()
+        params += self.W_o.parameters()
         return params
     
     def to(self, device=None, dtype=None):
         device, dtype = device_dtype_check(device, dtype)
         new = self.init_like()
-        new.linear = self.linear.to(device, dtype)
+        new.W_qkv = self.W_qkv.to(device, dtype)
+        new.W_o = self.W_o.to(device, dtype)
         if self.scale_qk_value is not None:
             new.scale_qk = self.scale_qk.to(device, dtype)
         return new
@@ -100,11 +111,11 @@ class SelfAttention(BaseModule):
         self.dropout.train()
     @property
     def mode(self):
-        return self.dropout._is_training
+        return self.dropout.mode
     
     def clone(self):
         atten = self.init_like()
-        atten.linear = self.linear.clone()
+        atten.W_qkv = self.W_qkv.clone()
         if self.scale_qk_value is not None:
             atten.scale_qk = self.scale_qk.clone()
         return atten
@@ -120,19 +131,20 @@ class SelfAttention(BaseModule):
             seq_len             =self.seq_len, 
             scale_qk_value      =self.scale_qk_value, 
             learnable_scale_qk  =hasattr(self, 'scale_qk') and self.scale_qk.learnable, 
-            dropout_p           =self.dropout.p if self.dropout else 0.0,
+            dropout_p           =self.dropout.p if self.use_dropout else 0.0,
             mask_dtype          =self.mask_dtype
         )
     
     def state_dict(self):
         return {
-            'linear': self.linear.state_dict(),
+            'linear': self.W_qkv.state_dict(),
             'scale_qk': self.scale_qk.state_dict() if hasattr(self, 'scale_qk') and self.scale_qk.learnable else None,
+            'W_o': self.W_o.state_dict(),
         }
         
     def load_state(self, state):
         try:
-            self.linear.load_state(state['linear'])
+            self.W_qkv.load_state(state['linear'])
             if hasattr(self, 'scale_qk') and self.scale_qk.learnable:
                 self.scale_qk.load_state(state['scale_qk'])
         except ValueError as e:
@@ -151,6 +163,6 @@ class SelfAttention(BaseModule):
             f'    seq_len={self.seq_len},\n'
             f'    scale_qk_value={self.scale_qk_value},\n'
             f'    learnable_scale_qk={hasattr(self, "scale_qk") and self.scale_qk.learnable},\n'
-            f'    dropout_p={self.dropout.p if self.dropout else 0.0}\n'
+            f'    dropout_p={self.dropout.p if self.use_dropout else 0.0}\n'
             f')'
         )

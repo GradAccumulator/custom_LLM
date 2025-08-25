@@ -1,7 +1,7 @@
 import torch
 import math
 
-class BaseModule:
+class BaseModule(object):
     '''
     모듈에 있어야 하는거\n
     to() -> type(self) 깊은복사\n
@@ -15,6 +15,7 @@ class BaseModule:
     def __init__(self, device='cpu', dtype=torch.float32):
         self.device = device
         self.dtype  = dtype
+        self._parameters = {}
         
     def state_key_check_with_raise(self, state_keys, keys, cls,func_name):
         '''state_keys에서 ㅏkeys에 없는게 있으면 raise 함'''
@@ -41,3 +42,18 @@ class BaseModule:
                 pass
             else:
                 raise ValueError(f'Invalid weight initialization: {init_type}')
+            
+    def __setattr__(self, name, value):
+        if isinstance(value, torch.Tensor):
+            self._parameters[name] = value
+        elif isinstance(value, BaseModule):
+            for k,v in value._parameters.items():
+                self._parameters[f'{name}.{k}'] = v
+        super().__setattr__(name, value)
+        
+    
+    def parameters(self):
+        return list(self._parameters.values())
+    
+    def parameters_as_dict(self):
+        return self._parameters

@@ -101,6 +101,7 @@ class Transformer:
         self.std_ffn_weights_out  = math.sqrt(2/(self.d_ffn+self.d_model))
         self.std_Wkqv  = math.sqrt(2/(self.d_model+self.d_model))
         self.std_Wo    = math.sqrt(2/(self.d_model+self.vocab_size))
+        self.std_atten_Wo = math.sqrt(2/(self.num_heads*self.d_head+self.d_model))
         self.arranged  = torch.arange(self.seq_len, device=self.device)
 
         #when use RoPE
@@ -119,6 +120,8 @@ class Transformer:
     def _reset_params(self):
         self.params = {
             'qkv_weights': (torch.randn(self.wkqv_shape, device=self.device, dtype=torch.float32)*self.std_Wkqv).requires_grad_(),
+            
+            'atten_output_weights': (torch.randn(self.num_heads*self.d_head, self.d_model, device=self.device, dtype=torch.float32)*self.std_atten_Wo).requires_grad_(),
 
             'ffn_weights_in' : (torch.randn(self.num_layers, self.d_model, self.d_ffn, device=self.device, dtype=torch.float32)*self.std_ffn_weights_in).requires_grad_(),
 
@@ -222,7 +225,9 @@ class Transformer:
         if dropout:
             weights = self.dropout(weights)
         
-        return (weights@V)
+        atten_out = (weights@V).transpose(1,2).reshape(Q.shape[0], Q.shape[2], self.num_heads*self.d_head)
+        out = atten_out@self.half_params['atten_output_weights']
+        return out
     
     def RoPE(self, x, seq_len=None):
         '''if seq_len is not None:
