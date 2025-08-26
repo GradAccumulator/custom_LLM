@@ -8,7 +8,22 @@ from src.utils.torch_utils import device_dtype_check
 
 class SelfAttention(BaseModule):
     def __init__(
-        self, d_model, num_heads, d_head=None,*,device='cpu', dtype=torch.float32, use_bias=False, init_method='Xavier', mask_type='causal', mask_dtype=torch.float16, seq_len=None, scale_qk_value=None, learnable_scale_qk=False, dropout_p=0.1):
+        self, 
+        d_model,
+        num_heads, 
+        d_head=None,
+        *,
+        device='cpu', 
+        dtype=torch.float32, 
+        use_bias=False, 
+        init_method='Xavier', 
+        mask_type='causal', 
+        mask_dtype=torch.float16, 
+        seq_len=None, 
+        scale_qk_value=None, 
+        learnable_scale_qk=False, 
+        dropout_p=0.1
+        ):
         if d_model%num_heads != 0 and d_head is None:
             raise AttributeError("d_model과 head 개수가 맞지 않습니다.")
         if d_head is None:
@@ -39,8 +54,8 @@ class SelfAttention(BaseModule):
         self.reset_params()
     
     def reset_params(self):
-        self.W_qkv = Linear(self.d_model, self.num_heads*self.d_head*3, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
-        self.W_o = Linear(self.num_heads*self.d_head, self.d_model, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
+        self.linear_qkv = Linear(self.d_model, self.num_heads*self.d_head*3, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
+        self.linear_output = Linear(self.num_heads*self.d_head, self.d_model, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
     
     @property
     def use_bias(self):
@@ -56,7 +71,7 @@ class SelfAttention(BaseModule):
         input shape:(B, seq_len, d_model)
         output shape:(B, num_heads, seq_len, d_head), (Q,K,V)
         '''
-        Q,K,V = self.W_qkv(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head*3).transpose(1, 2).split(self.d_head, dim=-1)
+        Q,K,V = self.linear_qkv(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head*3).transpose(1, 2).split(self.d_head, dim=-1)
         if self.scale_qk_value is not None:
             return (Q*self.scale_qk, K*self.scale_qk,V)
         return (Q,K,V)
@@ -79,7 +94,7 @@ class SelfAttention(BaseModule):
         '''
         Q,K,V = self._get_qkv(x)
         atten_out = self._attention(Q, K, V, x.shape[1]).transpose(1,2).reshape(x.shape[0], x.shape[1], self.num_heads*self.d_head)
-        out = self.W_o(atten_out)
+        out = self.linear_output(atten_out)
         return out
     
     def __call__(self, x):
@@ -88,8 +103,8 @@ class SelfAttention(BaseModule):
     def to(self, device=None, dtype=None):
         device, dtype = device_dtype_check(device, dtype)
         new = self.init_like()
-        new.W_qkv = self.W_qkv.to(device, dtype)
-        new.W_o = self.W_o.to(device, dtype)
+        new.linear_qkv = self.linear_qkv.to(device, dtype)
+        new.linear_output = self.linear_output.to(device, dtype)
         if self.scale_qk_value is not None:
             new.scale_qk = self.scale_qk.to(device, dtype)
         return new
@@ -104,7 +119,7 @@ class SelfAttention(BaseModule):
     
     def clone(self):
         atten = self.init_like()
-        atten.W_qkv = self.W_qkv.clone()
+        atten.linear_qkv = self.linear_qkv.clone()
         if self.scale_qk_value is not None:
             atten.scale_qk = self.scale_qk.clone()
         return atten
@@ -126,14 +141,14 @@ class SelfAttention(BaseModule):
     
     def state_dict(self):
         return {
-            'linear': self.W_qkv.state_dict(),
+            'linear': self.linear_qkv.state_dict(),
             'scale_qk': self.scale_qk.state_dict() if hasattr(self, 'scale_qk') and self.scale_qk.learnable else None,
-            'W_o': self.W_o.state_dict(),
+            'W_o': self.linear_output.state_dict(),
         }
         
     def load_state(self, state):
         try:
-            self.W_qkv.load_state(state['linear'])
+            self.linear_qkv.load_state(state['linear'])
             if hasattr(self, 'scale_qk') and self.scale_qk.learnable:
                 self.scale_qk.load_state(state['scale_qk'])
         except ValueError as e:
@@ -141,6 +156,17 @@ class SelfAttention(BaseModule):
             raise e
         
     def __repr__(self):
+        scale_qk_repr = ''
+        if hasattr(self, 'scale_qk'):
+            scale_qk_repr = (
+                f'scale_qk_value={self.scale_qk_value}\n'
+                f'learnable_scale_qk={self.scale_qk.learnable}'
+            )
+            if self.scale_qk.learnable:
+                scale_qk_repr += (
+                    f"<<scale_qk>>"
+                    f'{repr(self.scale_qk.scale)}'
+                )
         return (
             f'SelfAttention(\n'
             f'    d_model={self.d_model},\n'
@@ -150,8 +176,8 @@ class SelfAttention(BaseModule):
             f'    init_method={self.init_method},\n'
             f'    mask_type={self.mask_type},\n'
             f'    seq_len={self.seq_len},\n'
-            f'    scale_qk_value={self.scale_qk_value},\n'
-            f'    learnable_scale_qk={hasattr(self, "scale_qk") and self.scale_qk.learnable},\n'
-            f'    dropout_p={self.dropout.p if self.use_dropout else 0.0}\n'
+            f'    dropout_p={self.dropout.p if self.use_dropout else 0.0},\n'
+            +scale_qk_repr+
+            f'    mask_dtype={self.mask_dtype}\n'
             f')'
         )

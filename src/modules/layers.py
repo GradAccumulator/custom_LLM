@@ -17,10 +17,10 @@ class LayerWrapper(dict):
             f'\n)'
         )
     
-    def __getitem__(self, key):
+    def __getitem__(self, key:int|str):
         return super().__getitem__(str(key))
-    def __setitem__(self, key, value):
-        super().__setitem__(str(key), value)
+    def __setitem__(self, key:int|str, module):
+        super().__setitem__(str(key), module)
     
     @staticmethod
     def wrap_layers(layers:list[dict[str,Any]]):
@@ -53,6 +53,8 @@ class Layers(BaseModule):
             for i,m in enumerate(modules_list):
                 modules[str(i)] = m
             self.is_dict = False
+        #modules 인자가 list이든 dict이든 상관없이 
+        #self.modules:dict[str, BaseModule]로 저장함
         
         super().__init__(device=device, dtype=dtype)
         self.modules:dict[str, Any] = modules

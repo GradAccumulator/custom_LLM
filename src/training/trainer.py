@@ -13,6 +13,7 @@ colorama_init()
 class Trainer:
     STOP = "STOP"
     EXIT = "EXIT"
+    torch.nn.MultiheadAttention
     def __init__(self, model, optimizer, train_loader, val_loader, logger, config, loss_fn, tboard_manager=None, scheduler=None,*, validation=True):
         self.model = model
         self.optimizer = optimizer
