@@ -74,8 +74,8 @@ private:
 		 if (cached_causal_mask.defined() && seq_len == Q.size(2))
 			 scores += cached_causal_mask;
 		 else {
-			 auto causal_mask = torch::full({ 
-					 Q.size(2), Q.size(2) }, -1e8, 
+			 auto causal_mask = torch::full(
+				 { Q.size(2), Q.size(2) }, -1e8, 
 					 torch::TensorOptions().device(Q.device()).dtype(Q.dtype())
 				 ).triu(1);
 			 scores += causal_mask;
@@ -182,7 +182,7 @@ public:
 			{"heads", 12}
 		};*/
 		bool use_bias = saved[idx.at("output_bias")].defined();
-		
+
 		//x.shape == (B, seq_len, d_model)
 		auto x = saved[idx.at("x")];
 		int batch = x.size(0);
@@ -196,7 +196,7 @@ public:
 		int d_model = Wo.size(-1);
 		auto head_i = saved[idx.at("heads")];
 		//head_i.shape == (B, num_heads, seq_len, d_head)
-		auto concated_heads = head_i.transpose(1, 2).reshape({batch*seq_len, d_model});
+		auto concated_heads = head_i.transpose(1, 2).reshape({ batch * seq_len, d_model });
 		auto concated_grad_out = grad_out.reshape({ batch * seq_len, d_model });
 		//output_i = head_i@Wo_i
 		//  ㄴ미분--> dO_i/dHead_i = grad_out@Wo_i.T
@@ -215,27 +215,115 @@ public:
 		//weight_i.shape			      == (B, num_heads, seq_len, seq_len)
 		//V_i.shape						  == (B, num_heads, seq_len, d_head)
 		auto weight_i = saved[idx.at("weight")];
-		auto V_i			  = saved[idx.at("V")];
-		auto dOi_dVi = weight_i.transpose(2, 3).matmul(dOi_dHeadi);
+		auto V_i = saved[idx.at("V")];
+		auto dO_dV = weight_i.transpose(2, 3).matmul(dOi_dHeadi)
+			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
 		auto dOi_dWeighti = dOi_dHeadi.matmul(V_i.t());
 
-		//V_i = X_i@Wv_i
+		//Bqkv 미분용 텐서 미리 할당
+		torch::Tensor dO_dBqkv;
+		torch::Tensor dO_dBqkv_splited;
+		torch::Tensor dO_dBq;
+		torch::Tensor dO_dBk;
+		torch::Tensor dO_dBv;
+
+		if (use_bias) {
+			auto dO_dBqkv = torch::empty_like(saved[idx.at("qkv_bias")]);
+			auto dO_dBqkv_splited = dO_dBqkv.split(num_heads * d_head);
+
+			auto dO_dBq = dO_dBqkv_splited[0];
+			auto dO_dBk = dO_dBqkv_splited[1];
+			auto dO_dBv = dO_dBqkv_splited[2];
+		}
+		else {
+			auto dO_dBqkv = torch::Tensor();
+		}
+
+		//Wqkv 미분용 텐서 미리 할당
+		auto Q = saved[idx.at("Q")];
+		auto K = saved[idx.at("K")];
+		auto V = saved[idx.at("V")];
+
+		auto qkv_weight = saved[idx.at("qkv_weight")];
+		auto dO_dWqkv = torch::empty_like(qkv_weight);
+		auto dO_dWqkv_splited = dO_dWqkv.split(num_heads * d_head, -1);
+
+		auto dO_dWq = dO_dWqkv_splited[0];
+		auto dO_dWk = dO_dWqkv_splited[1];
+		auto dO_dWv = dO_dWqkv_splited[2];
+
+		//V_i = X_i@Wv_i + Bv_i
 		// x.shape					== (B, seq_len, d_model)
 		//dHeadi_dVi.shape == (B, num_heads, seq_len, d_head)
-		auto dO_dV = dOi_dVi.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
-		auto dO_dWv = x.reshape({ batch * seq_len, d_model }).t().matmul(dO_dV);
-		
+		x = x.reshape({ batch * seq_len, d_model }).t();
+		dO_dWv.copy_(x.matmul(dO_dV));
+		if (use_bias) {
+			dO_dBv.copy_(dO_dV.sum({ 0 }));
+		}
+
 		//weight_i = softmax(scores)
 		// scores.shape == (B, num_heads, seq_len, seq_len)
 		auto scores = saved[idx.at("scores")];
-		auto dSoftmaxi_dScoresi = torch::diag_embed(scores) 
+		auto dSoftmaxi_dScoresi = torch::diag_embed(scores)
 			- scores.unsqueeze(-1) * scores.unsqueeze(-2);
-		
+
+		//W_iqkv 미분
 		//dSoftmax_i/dScores_i.shape == (B, num_heads, seq_len, seq_len, seq_len)
 		//dO_i/dWeight_i.shape == (B, num_heads, seq_len, seq_len)
-		auto dOi_dScoresi = dOi_dWeighti.matmul(dSoftmaxi_dScoresi.transpose(3, 4));
+		auto dOi_dScoresi = dOi_dWeighti.unsqueeze(3)
+			.matmul(dSoftmaxi_dScoresi.transpose(3, 4))
+			.squeeze(3);
+		// scores    = QK.T
+		// Q.shape == (B, num_heads,  seq_len, d_head)
+		// K.shape == (B, num_heads,  seq_len, d_head)
+		//dO_i/dScores_i.shape == (B, num_heads, seq_len, seq_len)
+		//Wqkv.shape				   == (d_model, num_heads*d_head*3)
+		auto dO_dQ = dOi_dScoresi.matmul(K)
+			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
+		auto dO_dK = Q.matmul(dOi_dScoresi)
+			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
 
-		//W_ik 미분
-		auto dOi_dKi = dOi_dScoresi.matmul()
+		if (use_bias) {
+			dO_dBq.copy_(dO_dQ.sum({ 0 }));
+			dO_dBk.copy_(dO_dK.sum({ 0 }));
+		}
+
+		//(Q/K) = X@(Wq/Wk)
+		//dO/d(Q/K).shape == (batch*seq_len, num_heads*d_head)
+		//X.shape == (B, seq_len, d_model)
+		//   ㄴ> (d_model, B*seq_len) 미리 바꿔놓음
+		dO_dWq.copy_(x.matmul(dO_dQ));
+		dO_dWk.copy_(x.matmul(dO_dK));
+
+		//(Q/K/V) = X@W(q/k/v)
+		//Wqkv.shape == (d_model, num_heads*d_head*3)
+		//dO/d(Q/K).shape == (batch*seq_len, num_heads*d_head)
+		//x.shape		  == (B, seq_len, d_model)
+		auto Wqkv = saved[idx.at("qkv_weight")];
+		x = x.t().reshape({ batch, seq_len, d_model });
+		auto dO_dx = dO_dQ.matmul(Wqkv.slice(-1, 0, num_heads * d_head).t())
+				.reshape({ batch, seq_len, d_model })
+			+ dO_dK.matmul(Wqkv.slice(-1, num_heads * d_head, num_heads * d_head * 2).t())
+				.reshape({ batch, seq_len, d_model })
+			+ dO_dV.matmul(Wqkv.slice(-1, num_heads * d_head * 2, num_heads * d_head * 3).t())
+				.reshape({ batch, seq_len, d_model });
+
+		/*static torch::Tensor forward(
+		AutogradContext* ctx,
+		torch::Tensor x,
+		torch::Tensor qkv_weight,
+		torch::Tensor output_weight,
+		int num_heads,
+		int d_head,
+		int seq_len,
+		torch::Tensor qkv_bias=torch::Tensor(),
+		torch::Tensor output_bias=torch::Tensor(),
+		torch::Tensor scale_qk=torch::Tensor(),
+		torch::Tensor cached_causal_mask=torch::Tensor(),
+		float p_drop=0.0f
+	)*/
+		return {
+
+		};
 	}
 };

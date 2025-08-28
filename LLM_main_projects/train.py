@@ -1,5 +1,4 @@
 
-from src.utils import dev_utils, DataLoader
 from src.utils.processing import data_processing
 
 from assets.configs.default_settings import (
@@ -11,18 +10,17 @@ from assets.configs.default_settings import (
 )
 from assets.configs.trainer_config import TrainerConfig
 
-from src.training.trainer import Trainer
-from src.models.transformers import Transformer, TransformerII
-from src.training.Optimizers import Adam, SGD
+from src.models.transformers import (Transformer, TransformerII)
 from src.nlp.NLP_preprocessor import NLP_Preprocessor
-from src.training.Scheduler import Scheduler
-from src.training.Scheduler import warmups
-from src.training.Scheduler import decays
-from src.utils.logging import Logger
-from src.utils.logging.tboard_manager import TBoardManager
-from PATHES import PATHES
+from src.utils import dev_utils, DataLoader
+from src.training.Optimizers import Adam
+from src.training.Scheduler import (Scheduler, warmups, decays)
+from src.utils.logging import (TBoardManager, Logger)
+from src.training.trainer import Trainer
+
 from src.modules.loss_functions import CrossEntropyLoss
 from src.utils.dev_utils import timer, parent_timer
+from PATHES import PATHES
 
 if __name__ == '__main__':
     with parent_timer("학습 전 설정"):
@@ -38,10 +36,10 @@ if __name__ == '__main__':
             val_loader = DataLoader(val_x, val_label, device='cuda')
         
         with timer("optimizer & scheduler 생성"):
-            max_lr = 6.5e-5
-            optimizer = Adam(model.parameters_as_dict(), max_lr, 0.9, 0.95, 1e-2, eps=1e-8, clip_grad=5)
+            max_lr = 3e-5
+            optimizer = Adam(model.parameters_as_dict(), max_lr, 0.9, 0.95, 1e-3, eps=1e-8, clip_grad=5)
             
-            scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.effective_warmup_steps, decays.CosineDecay, scheduler_config.effective_total_steps, min_lr = max_lr*0.1)
+            scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.effective_warmup_steps, decays.CosineDecay, scheduler_config.effective_total_steps, min_lr = 7e-6)
         
         with timer("logger & tboard_manager 생성"):
             logger = Logger(logger_config.logs_dir)
