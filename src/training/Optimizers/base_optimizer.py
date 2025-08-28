@@ -72,15 +72,18 @@ class BaseOptimizer:
             if self.clip_grad:
                 self.prev_grad_norm = self.clip_grad_norm()
             gradients = compute_grad_fn()
-            for k, p in self._params['weight_decay'].items():
-                p.sub_(self.lr * (gradients[k]  + self._wd*p))
-            for k,p in self._params['others'].items():
-                p.sub_(self.lr * gradients[k])
-            for k,p,ld in self._params['lr_decay']['weight_decay'].items():
-                p.sub_(self.lr*ld*(gradients[k] + self._wd*p))
-            for k,p,ld in self._params['lr_decay']['others'].items():
-                p.sub_(self.lr * ld*gradients[k])
-                
+            try:
+                for k, p in self._params['weight_decay'].items():
+                    p.sub_(self.lr * (gradients[k]  + self._wd*p))
+                for k,p in self._params['others'].items():
+                    p.sub_(self.lr * gradients[k])
+                for k,p,ld in self._params['lr_decay']['weight_decay'].items():
+                    p.sub_(self.lr*ld*(gradients[k] + self._wd*p))
+                for k,p,ld in self._params['lr_decay']['others'].items():
+                    p.sub_(self.lr * ld*gradients[k])
+            except Exception as e:
+                print(f'error in optimizer step_with_wd in {k}')
+                raise e
     def step_with_none(self, compute_grad_fn:Callable[[],dict[str,torch.Tensor]]):
         with torch.no_grad():
             if self.clip_grad:

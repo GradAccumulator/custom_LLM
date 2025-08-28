@@ -27,14 +27,16 @@ class Linear(BaseModule):
     
     def to(self, device=None, dtype=None):
         device,dtype = device_dtype_check(device, dtype)
-        if self.dtype==dtype or dtype is None:
+        if(self.dtype==dtype or dtype is None) and (self.device==device or device is None):
             return self
         new = self.init_like()
-        new.device = device if device is not None else self.device
-        new.dtype = dtype if dtype is not None else self.dtype
-        new.weight = self.weight.detach().to(device=new.device, dtype=new.dtype).requires_grad_()
+        device = device or self.device
+        dtype = dtype or self.dtype
+        new.weight = self.weight.detach().to(device=device, dtype=dtype).requires_grad_()
         if self.use_bias:
-            new.bias = self.bias.detach().to(device=new.device, dtype=new.dtype).requires_grad_()
+            new.bias = self.bias.detach().to(device=device, dtype=dtype).requires_grad_()
+        new.device = device
+        new.dtype = dtype
         return new
     @property
     def use_bias(self):

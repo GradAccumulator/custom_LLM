@@ -12,3 +12,7 @@ analysis/
 **/*.pyc
 bigdata/
 !folder_tree.txt
+src/c_modules/include
+src/c_modules/build
+src/c_modules/dlls
+.vs/

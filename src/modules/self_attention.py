@@ -103,10 +103,15 @@ class SelfAttention(BaseModule):
     def to(self, device=None, dtype=None):
         device, dtype = device_dtype_check(device, dtype)
         new = self.init_like()
+        device = device or self.device
+        dtype = dtype or self.device
         new.linear_qkv = self.linear_qkv.to(device, dtype)
         new.linear_output = self.linear_output.to(device, dtype)
+        new.cached_mask = self.cached_mask.to(device, dtype)
         if self.scale_qk_value is not None:
             new.scale_qk = self.scale_qk.to(device, dtype)
+        new.device = device
+        new.dtype = dtype
         return new
     
     def eval(self):

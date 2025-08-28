@@ -12,7 +12,7 @@ from assets.configs.default_settings import (
 from assets.configs.trainer_config import TrainerConfig
 
 from src.training.trainer import Trainer
-from src.models.transformers import Transformer
+from src.models.transformers import Transformer, TransformerII
 from src.training.Optimizers import Adam, SGD
 from src.nlp.NLP_preprocessor import NLP_Preprocessor
 from src.training.Scheduler import Scheduler
@@ -27,7 +27,7 @@ from src.utils.dev_utils import timer, parent_timer
 if __name__ == '__main__':
     with parent_timer("학습 전 설정"):
         with timer("모델 생성"):
-            model = Transformer(**transformer_config)
+            model = TransformerII(**transformer_config)
         
         with timer("데이터 전처리"):
             preprocessor = NLP_Preprocessor(model, preprocessor_config, dev_utils=dev_utils, dp=data_processing)
@@ -38,8 +38,8 @@ if __name__ == '__main__':
             val_loader = DataLoader(val_x, val_label, device='cuda')
         
         with timer("optimizer & scheduler 생성"):
-            max_lr = 3e-5
-            optimizer = Adam(model.params, max_lr, 0.9, 0.95, 1e-2, eps=1e-7, clip_grad=5)
+            max_lr = 6.5e-5
+            optimizer = Adam(model.parameters_as_dict(), max_lr, 0.9, 0.95, 1e-2, eps=1e-8, clip_grad=5)
             
             scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.effective_warmup_steps, decays.CosineDecay, scheduler_config.effective_total_steps, min_lr = max_lr*0.1)
         

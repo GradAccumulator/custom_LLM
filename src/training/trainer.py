@@ -163,8 +163,7 @@ class Trainer:
             log_norms_and_lr = (
                 f'| grad_norm:{self.optimizer.prev_grad_norm.item():.4g}'.ljust(self.ngnorm)+
                 f'| weight_norm:{self.weight_norm.item():.4g}'.ljust(self.ngnorm-2)+
-                f'| lr:{self.scheduler.prev_lr:.5g}'.ljust(15)+
-                f'| qkvWAbsMean:{self.optimizer.parameters_as_dict()["qkv_weights"].grad[0].abs().mean().item():.4g}'
+                f'| lr:{self.scheduler.prev_lr:.5g}'.ljust(15)
             )
             print(log+log_norms_and_lr)
             self.logger.write(datetime.datetime.now().isoformat()+" | "+log+'\n\t'+log_norms_and_lr)

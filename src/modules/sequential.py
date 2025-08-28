@@ -23,7 +23,7 @@ class Sequential(BaseModule):
             raise ValueError('layers_dict와 layers_list를 동시에 전달할 수 없습니다.')
         elif not layers_dict and not layers_list:
             raise ValueError('layers_dict and layers_list are empty.')
-        elif isinstance(layers_list[0], dict):
+        elif len(layers_list) >= 1 and isinstance(layers_list[0], dict):
             if len(layers_list) > 1:
                 raise ValueError('layers를 딕셔너리로 전달할 때는 여러개의 인자를 전달할 수 없습니다.')
             self.is_dict = True
@@ -41,12 +41,16 @@ class Sequential(BaseModule):
 
         for k in self.layers.keys():
             if not isinstance(self.layers[k], To) and hasattr(self.layers[k], 'to'):
-                self.layers[k] = self.layers[k].to(device=self.device, dtype=self.dtype)
+                self[k] = self.layers[k].to(device=self.device, dtype=self.dtype)
     
     def forward(self, x):
-        for layer in self.layers.values():
-            x = layer(x)
-        return x
+        try:
+            for key,layer in self.layers.items():
+                x = layer(x)
+            return x
+        except Exception as e:
+            print(f"error in layer {key}")
+            raise e
     
     def __call__(self, x):
         return self.forward(x)
@@ -56,11 +60,13 @@ class Sequential(BaseModule):
         if (device is None and dtype is None) or (self.device == device and self.dtype == dtype):
             return self
         seq = self.clone()
-        seq.device = device if device is not None else self.device
-        seq.dtype = dtype if dtype is not None else self.dtype
+        device = device or self.device
+        dtype = dtype or self.dtype
         for k in seq.layers.keys():
-            if  not isinstance(seq.layers[k], To) and hasattr(self.layers[k], 'to'):
-                seq.layers[k] = seq.layers[k].to(device=device, dtype=dtype)
+            if not isinstance(seq[k], To) and hasattr(seq[k], 'to'):
+                seq[k] = seq[k].to(device=device, dtype=dtype)
+        seq.device = device
+        seq.dtype = dtype
         return seq
     
     def __len__(self):
@@ -74,9 +80,12 @@ class Sequential(BaseModule):
         if idx not in self.layers.keys():
             raise KeyError(idx)
         if isinstance(value, BaseModule):
+            pop_list = []
             for k in self._parameters.keys():
                 if k[k.find('[')+1:k.find(']')] == str(idx):
-                    self._parameters.pop(k)
+                    pop_list.append(k)
+            for k in pop_list:
+                self._parameters.pop(k)
             for k,v in value._parameters.items():
                 self._parameters[f'layers[{idx}].{k}'] = v
         self.layers[idx] = value
@@ -118,7 +127,7 @@ class Sequential(BaseModule):
                 raise ValueError(
                         '<<Sequential.load_state>>\n'
                     f"Layer {k} has not load_state method.\n"
-                    "Cannot load state for this layer.\n"
+                    f"Cannot load state for this layer.\n"
                     f'(state keys: {list(state.keys())})'
                 )
             self[k].load_state(s)

@@ -37,13 +37,17 @@ class Adam(BaseOptimizer):
         params = self.parameters_as_dict()
         adam_updated = {}
         for key in params.keys():
-            self.m[key] = self.b1*self.m[key] + (1-self.b1)*params[key].grad
-            self.v[key] = self.b2*self.v[key] + (1-self.b2)*(params[key].grad**2)
+            try:
+                self.m[key] = self.b1*self.m[key] + (1-self.b1)*params[key].grad
+                self.v[key] = self.b2*self.v[key] + (1-self.b2)*(params[key].grad**2)
 
-            m_hat = self.m[key]/(1-self.b1**self.t)
-            v_hat = self.v[key]/(1-self.b2**self.t)
+                m_hat = self.m[key]/(1-self.b1**self.t)
+                v_hat = self.v[key]/(1-self.b2**self.t)
 
-            adam_updated[key] = m_hat/(v_hat.sqrt()+self.eps)
+                adam_updated[key] = m_hat/(v_hat.sqrt()+self.eps)
+            except Exception as e:
+                print(f"error in adam update in {key}")
+                raise e
         return adam_updated
 
     def step_with_wd(self):

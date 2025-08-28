@@ -1,7 +1,7 @@
 import torch
 from src.modules.sequential import Sequential
 from src.modules import Linear, Dropout, LayerNorm, SelfAttention, Residual, Scale, To, Layers
-from src.nlp.embedding import Embedding
+from src.nlp import Embedding, PositionalEmbedding
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src.utils.types import ActivationFunction
@@ -41,35 +41,40 @@ class TransformerII:
         self.dtype = dtype
         self.tokenizer = tokenizer
         self.residual = Residual()
-        self.embedding = Embedding(self.tokenizer.vocab_size, self.d_model)
         
         self.model = Sequential(
-            self.embedding,
-            Embedding(self.seq_len, self.d_model),
-            To(forward_type),
-            Dropout(self.p_dropout),
-            Layers(
-                self.residual.save(),
-                LayerNorm(self.d_model, eps=self.LN_eps),
-                SelfAttention(self.d_model, self.num_heads, seq_len=self.seq_len, scale_qk_value=self.scale_qk, learnable_scale_qk=True, dropout_p=self.p_dropout),
-                Dropout(self.p_dropout),
-                Scale(self.scale_res_atten, learnable=True),
-                self.residual.sum(),
+            embedding=Embedding(self.tokenizer.vocab_size, self.d_model),
+            to=To(forward_type),
+            pos_embedding=PositionalEmbedding(self.seq_len, self.d_model),
+            dropout=Dropout(self.p_dropout),
+            transformer_layers=Layers(
+                res1_save=self.residual.save(),
+                LN1=LayerNorm(self.d_model, eps=self.LN_eps),
+                attention=SelfAttention(self.d_model, self.num_heads, seq_len=self.seq_len, scale_qk_value=self.scale_qk, learnable_scale_qk=True, dropout_p=self.p_dropout),
+                dropout1=Dropout(self.p_dropout),
+                scale_res1=Scale(self.scale_res_atten, learnable=True),
+                res1_sum=self.residual.sum(),
                 
-                self.residual.save(),
-                LayerNorm(self.d_model, eps=self.LN_eps),
-                Linear(self.d_model, self.d_ffn),
-                Dropout(self.p_dropout),
-                Scale(self.scale_res_ffn, learnable=True),
-                self.residual.sum(),
+                res2_save=self.residual.save(),
+                LN2=LayerNorm(self.d_model, eps=self.LN_eps),
+                FFN_in=Linear(self.d_model, self.d_ffn),
+                act_fn=self.act_fn,
+                FFN_out=Linear(self.d_ffn, self.d_model),
+                dropout=Dropout(self.p_dropout),
+                scale_res2=Scale(self.scale_res_ffn, learnable=True),
+                res2_sum=self.residual.sum(),
             num_layers=self.num_layers)
             #weight tying
         )
-        self.model.to(device=self.device, dtype=self.dtype)
-        
+        self.model = self.model.to(device=self.device, dtype=self.dtype)
+    def train(self):
+        self.model.train()
+    def eval(self):
+        self.model.eval()
+    
     def forward(self, x):
         model_out = self.model(x)
-        logits = model_out@self.embedding.weight.T
+        logits = model_out@self.model['embedding'].table.T.to(model_out.dtype)
         return logits
     
     def __call__(self, x):
@@ -93,6 +98,11 @@ class TransformerII:
         return self.tokenizer.decode(x.argmax(dim=-1).tolist())
     def decode(self, x:torch.Tensor):
         return self.tokenizer.decode(x)
+    
+    def parameters(self):
+        return self.model.parameters()
+    def parameters_as_dict(self):
+        return self.model.parameters_as_dict()
     
     def encode(self, x:list[str],*, for_eval=False, is_dataset=False, max_length=10000) -> torch.Tensor:
         if not is_dataset:

@@ -32,8 +32,8 @@ class Transformer:
         transformer.params                      = state['params']
         transformer.embedding                   = Embedding.load_state(state['embedding'])
         transformer.pos_embedding               = Embedding.load_state(state['pos_embedding'])
-        transformer.params['token_embedding']   = transformer.embedding.weight
-        transformer.params['pos_embedding']     = transformer.pos_embedding.weight
+        transformer.params['token_embedding']   = transformer.embedding.table
+        transformer.params['pos_embedding']     = transformer.pos_embedding.table
         
         for k,p in transformer.params.items():
             if k in ['token_embedding', 'pos_embedding']:
@@ -153,8 +153,8 @@ class Transformer:
 
             #'scale_lm'   : torch.tensor(0.2, device=self.device, dtype=torch.float32, requires_grad=True),
 
-            'token_embedding': self.embedding.weight,
-            'pos_embedding'  : self.pos_embedding.weight,
+            'token_embedding': self.embedding.table,
+            'pos_embedding'  : self.pos_embedding.table,
         }
     
     def parameters(self)-> list[torch.Tensor]:
