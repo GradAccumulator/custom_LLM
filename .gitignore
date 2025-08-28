@@ -15,4 +15,7 @@ bigdata/
 src/c_modules/include
 src/c_modules/build
 src/c_modules/dlls
+src/c_modules/out
 .vs/
+!src/c_modules
+*pdb
