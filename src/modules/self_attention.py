@@ -159,7 +159,7 @@ class SelfAttention(BaseModule):
             if hasattr(self, 'scale_qk') and self.scale_qk.learnable:
                 self.scale_qk.load_state(state['scale_qk'])
         except ValueError as e:
-            print("<< SelfAttention load_state error >>")
+            print("Error in SelfAttention.load_state")
             raise e
         
     def __repr__(self):
