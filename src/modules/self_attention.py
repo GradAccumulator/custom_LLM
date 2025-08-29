@@ -48,9 +48,10 @@ class SelfAttention(BaseModule):
             
         self.recip_root_d_k = 1/(self.d_head**0.5)
         self.scale_qk_value = scale_qk_value
-        
+
         if self.scale_qk_value is not None:
             self.scale_qk = Scale(self.scale_qk_value, shape=(self.num_heads, 1, 1), learnable=learnable_scale_qk, device=self.device, dtype=self.dtype)
+        self.use_scale = self.scale_qk_value is not None
         self.reset_params()
     
     def reset_params(self):
@@ -72,7 +73,7 @@ class SelfAttention(BaseModule):
         output shape:(B, num_heads, seq_len, d_head), (Q,K,V)
         '''
         Q,K,V = self.linear_qkv(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head*3).transpose(1, 2).split(self.d_head, dim=-1)
-        if self.scale_qk_value is not None:
+        if self.use_scale:
             return (Q*self.scale_qk, K*self.scale_qk,V)
         return (Q,K,V)
     
@@ -125,7 +126,8 @@ class SelfAttention(BaseModule):
     def clone(self):
         atten = self.init_like()
         atten.linear_qkv = self.linear_qkv.clone()
-        if self.scale_qk_value is not None:
+        atten.linear_output = self.linear_output.clone()
+        if self.use_scale:
             atten.scale_qk = self.scale_qk.clone()
         return atten
     
@@ -165,12 +167,12 @@ class SelfAttention(BaseModule):
         if hasattr(self, 'scale_qk'):
             scale_qk_repr = (
                 f'scale_qk_value={self.scale_qk_value}\n'
-                f'learnable_scale_qk={self.scale_qk.learnable}'
+                f'learnable_scale_qk={self.scale_qk.learnable}\n'
             )
             if self.scale_qk.learnable:
                 scale_qk_repr += (
-                    f"<<scale_qk>>"
-                    f'{repr(self.scale_qk.scale)}'
+                    f"<<scale_qk>>\n"
+                    f'{repr(self.scale_qk.scale.flatten())}\n'
                 )
         return (
             f'SelfAttention(\n'

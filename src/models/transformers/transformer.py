@@ -159,6 +159,8 @@ class Transformer:
     
     def parameters(self)-> list[torch.Tensor]:
         return list(self.params.values())
+    def parameters_as_dict(self)-> dict[str,torch.Tensor]:
+        return self.params
 
     def __init__(self, seq_len:int, num_heads:int, d_model:int, num_layers:int, d_ffn:int, act_fn, tokenizer:koTokenizer, p_dropout=0.0, device='cuda',LN_eps=1e-5, dtype:torch.dtype=torch.float32, scale_qk=0.5, scale_res_ffn=1.0, scale_res_atten=1.0, skip_reset=False):
         if (d_model%num_heads) != 0:

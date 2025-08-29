@@ -2,9 +2,11 @@ import torch
 from src.utils.dev_utils import reading, writing, parent_timer, timer, print_log
 from winsound import Beep
 from src.utils.processing.data_processing import batchify
+import src.utils.dev_utils as dev_utils
+import src.utils.processing.data_processing as dp
 
 class NLP_Preprocessor:
-    def __init__(self, model, config, dev_utils, dp):
+    def __init__(self, model, config):
         self.model = model
         self.config = config
         self.load_preprocessed = config.load_preprocessed_dataset_file
@@ -12,8 +14,6 @@ class NLP_Preprocessor:
             self.dataset_path = config.PREPROCESSED_DATASET_PATH
         else:
             self.dataset_path = config.RAW_DATA_PATH
-        self.utils = dev_utils
-        self.dp = dp
         self.train_x = None
         self.train_label = None
         self.val_x = None
@@ -66,22 +66,22 @@ class NLP_Preprocessor:
     def __call__(self):
         return self.preprocess()
     def preprocess(self):
-        self.utils.print_log("데이터 전처리 시작")
+        dev_utils.print_log("데이터 전처리 시작")
         if not self.load_preprocessed:
-            with self.utils.timer("raw 데이터셋 읽는 시간"):
+            with dev_utils.timer("raw 데이터셋 읽는 시간"):
                 trainset, valset = self._read_raw_datasets()
 
-            with self.utils.timer("trainset 섞는시간"):
-                trainset = self.dp.shuffle(trainset)
-            with self.utils.timer("valset 섞는 시간"):
-                valset = self.dp.shuffle(valset)
+            with dev_utils.timer("trainset 섞는시간"):
+                trainset = dp.shuffle(trainset)
+            with dev_utils.timer("valset 섞는 시간"):
+                valset = dp.shuffle(valset)
 
-            with self.utils.parent_timer("trainset 인코딩& 패딩"):
+            with dev_utils.parent_timer("trainset 인코딩& 패딩"):
                 self.train_x,self.train_label = self._encode_and_pad(trainset, self.config.goal_trainset_len*1.6)
-            with self.utils.parent_timer("valset 인코딩&패딩"):
+            with dev_utils.parent_timer("valset 인코딩&패딩"):
                 self.val_x,self.val_label     = self._encode_and_pad(valset, self.config.goal_trainset_len*1.6)
 
-            with self.utils.timer("전처리된 데이터셋 저장"):
+            with dev_utils.timer("전처리된 데이터셋 저장"):
                 D = {
                     "train_x":self.train_x,
                     "train_label":self.train_label,
@@ -90,30 +90,30 @@ class NLP_Preprocessor:
                 }
                 torch.save(D, self.config.PREPROCESSED_DATASET_PATH)
         else:
-            with self.utils.timer("전처리된 데이터셋 읽는 시간"):
+            with dev_utils.timer("전처리된 데이터셋 읽는 시간"):
                 D = torch.load(self.dataset_path)
                 self.train_x       = D['train_x']
                 self.train_label   = D['train_label']
                 self.val_x      = D['val_x']
                 self.val_label      = D['val_label']
         
-        self.dp.check_and_raise(len(self.train_x)<self.config.goal_trainset_len, 
+        dp.check_and_raise(len(self.train_x)<self.config.goal_trainset_len, 
             f"[Preprocessor] 예상 trainset 길이와 실제 trainset 길이가 다릅니다. 예상:{self.config.goal_trainset_len}, 실제:{len(self.train_x)}")
-        self.dp.check_and_raise(len(self.val_x)<self.config.goal_valset_len,
+        dp.check_and_raise(len(self.val_x)<self.config.goal_valset_len,
             f"[Preprocessor] 예상 valset 길이와 실제 valset 길이가 다릅니다. 예상:{self.config.goal_valset_len}, 실제:{len(self.val_x)}")
         
-        with self.utils.timer("trainset 슬라이싱"):
+        with dev_utils.timer("trainset 슬라이싱"):
             self.train_x = self.train_x[:self.config.goal_trainset_len]
             self.train_label = self.train_label[:self.config.goal_trainset_len]
 
-        with self.utils.timer("valset 슬라이싱"):
+        with dev_utils.timer("valset 슬라이싱"):
             self.val_x = self.val_x[:self.config.goal_valset_len]
             self.val_label = self.val_label[:self.config.goal_valset_len]
 
-        with self.utils.timer("batchify"):
+        with dev_utils.timer("batchify"):
             self._batchify()
 
-        self.utils.print_log("데이터 전처리 완료")
+        dev_utils.print_log("데이터 전처리 완료")
         return (self.train_x, self.train_label, self.val_x, self.val_label)
 
 
@@ -124,7 +124,7 @@ class NLP_Preprocessor:
         valset_strlen = 0
         valset = []
         trainset = []
-        with self.utils.reading(self.dataset_path) as f:
+        with dev_utils.reading(self.dataset_path) as f:
             for line in f:
                 line = line.strip()
                 if valset_len<self.config.goal_valset_len and \
@@ -153,9 +153,9 @@ class NLP_Preprocessor:
                 labels.append(l)
             inputs = torch.cat(inputs, dim=0)
             labels = torch.cat(labels, dim=0)
-            inputs,labels = self.dp.shuffle_dataset(inputs, labels)
+            inputs,labels = dp.shuffle_dataset(inputs, labels)
         return (inputs, labels)
 
     def _batchify(self):
-        self.train_x, self.train_label = self.dp.batchify(self.train_x, self.train_label,batch_size=self.config.batch_size)
-        self.val_x, self.val_label = self.dp.batchify(self.val_x, self.val_label, batch_size=self.config.val_batch_size)
+        self.train_x, self.train_label = dp.batchify(self.train_x, self.train_label,batch_size=self.config.batch_size)
+        self.val_x, self.val_label = dp.batchify(self.val_x, self.val_label, batch_size=self.config.val_batch_size)

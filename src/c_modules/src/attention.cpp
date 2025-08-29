@@ -188,7 +188,7 @@ public:
 		int batch = x.size(0);
 		int seq_len = x.size(1);
 
-		auto dOut_dOutBias = use_bias ?
+		auto dO_dBo = use_bias ?
 			grad_out.sum(torch::OptionalIntArrayRef({ 0,1 }))
 			: torch::Tensor();
 
@@ -283,6 +283,30 @@ public:
 		auto dO_dK = Q.matmul(dOi_dScoresi)
 			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
 
+		//Q = Q*scale_qk
+		//K = K*scale_qk
+		//scale_qk.shape == (num_heads, 1, 1)
+		//			or (1,1,1)
+		auto scale_qk = saved[idx.at("scale_qk")];
+		torch::Tensor dO_dSqk;
+		if (scale_qk.defined()) {
+			if (scale_qk.sizes() == c10::IntArrayRef({ num_heads, 1, 1 })) {
+				dO_dSqk = dO_dK.reshape({ batch * seq_len, d_head, num_heads })
+					.reshape({ batch * seq_len * d_head, num_heads }).sum(0)
+					+ dO_dQ.reshape({ batch * seq_len, d_head, num_heads })
+					.reshape({ batch * seq_len * d_head, num_heads }).sum(0);
+			}
+			else {
+				dO_dSqk = dO_dK.sum() + dO_dQ.sum();
+			}
+
+			dO_dK *= scale_qk;
+			dO_dQ *= scale_qk;
+		}
+		else {
+			dO_dSqk = torch::Tensor();
+		}
+
 		if (use_bias) {
 			dO_dBq.copy_(dO_dQ.sum({ 0 }));
 			dO_dBk.copy_(dO_dK.sum({ 0 }));
@@ -323,7 +347,17 @@ public:
 		float p_drop=0.0f
 	)*/
 		return {
-
+			dO_dx,
+			dO_dWqkv,
+			dO_dWo,
+			torch::Tensor(),
+			torch::Tensor(),
+			torch::Tensor(),
+			dO_dBqkv,
+			dO_dBo,
+			dO_dSqk,
+			torch::Tensor(),
+			torch::Tensor(),
 		};
 	}
 };
