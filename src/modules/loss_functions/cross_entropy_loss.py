@@ -8,7 +8,7 @@ class CrossEntropyLoss(LossFunction):
             logit_input             =True, 
             ignore_label_indices    =[], 
             dim                     =-1, 
-            weight_device                  ='cpu',
+            weight_device           ='cpu',
             stability_scale         =1.0,
             weight:Path|PathLike|ListLike|dict=None, 
         ):
@@ -16,10 +16,10 @@ class CrossEntropyLoss(LossFunction):
         self.ignore_indices = torch.tensor(ignore_label_indices, device=weight_device)
         self.dim = dim
         if logit_input:
-            self.forward = self._CE_softmax
+            self.cross_entropy_loss = self._CE_softmax
         else:
-            self.forward = self._CE       
-        self.weight_device = weight
+            self.cross_entropy_loss = self._CE       
+        self.weight = weight
         self.stability_scale = stability_scale
         self.recip_stability_scale = 1.0/self.stability_scale
         self.device = weight_device
@@ -28,7 +28,7 @@ class CrossEntropyLoss(LossFunction):
         _,dtype = device_dtype_check(device, dtype)
         if self.dtype==dtype or dtype is None:
             return self
-        new= CrossEntropyLoss(logit_input=self.logit_input, ignore_label_indices=self.ignore_indices, dim=self.dim, weight_device=self.device, stability_scale=self.stability_scale, weight=self.weight_device)
+        new= CrossEntropyLoss(logit_input=self.logit_input, ignore_label_indices=self.ignore_indices, dim=self.dim, weight_device=self.device, stability_scale=self.stability_scale, weight=self.weight)
         return new
         
     def __repr__(self):
@@ -37,7 +37,7 @@ class CrossEntropyLoss(LossFunction):
             f'logit_input={self.logit_input}, \n\t'
             f'ignore_indices={self.ignore_indices.tolist()}, \n\t'
             f'dim={self.dim}, \n\t'
-            f'weight={self.weight_device}, \n\t'
+            f'weight={self.weight}, \n\t'
             f'device={self.device}, \n\t'
             f'stability_scale={self.stability_scale}\n'
             ')'
@@ -54,8 +54,8 @@ class CrossEntropyLoss(LossFunction):
         return logs
     
     def _apply_weight(self, loss:Tensor, label:Tensor):
-        if self.weight_device is not None:
-            loss = loss*self.weight_device[label].to(loss.dtype)
+        if self.weight is not None:
+            loss = loss*self.weight[label].to(loss.dtype)
         return loss
     
     def _apply_scales(self, loss:Tensor):
@@ -105,14 +105,14 @@ class CrossEntropyLoss(LossFunction):
         
         return self._apply_unreduction_scale(loss)
 
+    def __call__(self, pred, label):
+        return self.cross_entropy_loss(pred, label)
+    
     @property
-    def device(self):
-        return self._weight.device
-    @property
-    def weight_device(self):
-        return self._weight.device
-    @weight_device.setter
-    def weight_device(self, loss_weights:Path|PathLike|ListLike|dict):
+    def weight(self):
+        return self._weight
+    @weight.setter
+    def weight(self, loss_weights:Path|PathLike|ListLike|dict):
         if isinstance(loss_weights, PathLike) or isinstance(loss_weights, Path):
             self._weight = torch.load(loss_weights).half()
         elif type(loss_weights) == Tensor:
@@ -130,7 +130,7 @@ class CrossEntropyLoss(LossFunction):
             raise TypeError(f"[CE] loss_weights 타입({type(loss_weights)})은 유효하지 않습니다")
 
     def state_dict(self):
-        weight = self._weight.cpu().detach().clone() if self.weight_device is not None else None
+        weight = self._weight.cpu().detach().clone() if self.weight is not None else None
         return {
             'ignore_values': self.ignore_indices,
             'dim': self.dim,

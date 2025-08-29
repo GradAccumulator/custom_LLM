@@ -289,15 +289,16 @@ public:
 		//			or (1,1,1)
 		auto scale_qk = saved[idx.at("scale_qk")];
 		torch::Tensor dO_dSqk;
-		if (scale_qk.defined()) {
+		if (scale_qk.defined() && scale_qk.requires_grad()) {
 			if (scale_qk.sizes() == c10::IntArrayRef({ num_heads, 1, 1 })) {
-				dO_dSqk = dO_dK.reshape({ batch * seq_len, d_head, num_heads })
-					.reshape({ batch * seq_len * d_head, num_heads }).sum(0)
-					+ dO_dQ.reshape({ batch * seq_len, d_head, num_heads })
-					.reshape({ batch * seq_len * d_head, num_heads }).sum(0);
+				dO_dSqk = dO_dK.reshape({batch, seq_len, d_head, num_heads})
+						.sum({0, 1, 2})
+					+ dO_dQ.reshape({ batch, seq_len, d_head, num_heads })
+						.sum({ 0,1,2 });
 			}
 			else {
 				dO_dSqk = dO_dK.sum() + dO_dQ.sum();
+				dO_dSqk = dO_dSqk.reshape_as(scale_qk);
 			}
 
 			dO_dK *= scale_qk;
@@ -308,8 +309,8 @@ public:
 		}
 
 		if (use_bias) {
-			dO_dBq.copy_(dO_dQ.sum({ 0 }));
-			dO_dBk.copy_(dO_dK.sum({ 0 }));
+			dO_dBq.copy_(dO_dQ.sum(0));
+			dO_dBk.copy_(dO_dK.sum(0));
 		}
 
 		//(Q/K) = X@(Wq/Wk)

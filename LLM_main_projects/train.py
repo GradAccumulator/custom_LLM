@@ -33,10 +33,19 @@ if __name__ == '__main__':
             val_loader = DataLoader(val_x, val_label, device='cuda')
         
         with timer("optimizer & scheduler 생성"):
-            max_lr = 1.5e-5
-            optimizer = Adam(model.parameters_as_dict(), max_lr, 0.9, 0.95, 1e-3, eps=1e-8, clip_grad=1)
+            max_lr = 1e-4
+            optimizer = Adam(
+                model.parameters_as_dict(), 
+                max_lr,
+                0.9, 0.95, 1e-2, 
+                eps=1e-8, 
+                clip_grad=1,
+                lr_scale= {
+                    'layers[embedding].table':0.1
+                }
+            )
             
-            scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.effective_warmup_steps, decays.CosineDecay, scheduler_config.effective_total_steps, min_lr = 8.5e-6)
+            scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.effective_warmup_steps, decays.CosineDecay, scheduler_config.effective_total_steps, min_lr = max_lr*0.1)
         
         with timer("logger & tboard_manager 생성"):
             logger = Logger(logger_config.logs_dir)

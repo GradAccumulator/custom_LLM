@@ -2,7 +2,7 @@ import torch
 from typing import Callable
 
 class BaseOptimizer:
-    def __init__(self, parameters:dict[str, torch.tensor], lr:float, weight_decay:float=0, clip_grad:float|bool=True, **lr_decay):
+    def __init__(self, parameters:dict[str, torch.tensor], lr:float, weight_decay:float=0, clip_grad:float|bool=True, lr_scale:dict=None):
         '''
         parameters: a dict of parameters                                                    \n
         lr: learning rate                                                                   \n                          
@@ -11,7 +11,7 @@ class BaseOptimizer:
         '''
         self.lr = lr
         self._wd = weight_decay
-        self._ld = lr_decay
+        self._ld = lr_scale
         self._cached_params_as_dict = parameters
         self._cached_params_as_list = list(self._cached_params_as_dict.values())
         self.weight_decay = weight_decay
@@ -49,13 +49,13 @@ class BaseOptimizer:
         if wd == 0:
             self.step = self.step_with_none
             self._params = {key:parameters[key] for key in parameters.keys() if self._ld and key not in self._ld.keys()}
-            self._params.update({"lr_decay":{key:(parameters[key], self._ld[key]) for key in parameters.keys() if key in self._ld.keys()}}) if self._ld is not None else None
+            self._params.update({"lr_scale":{key:(parameters[key], self._ld[key]) for key in parameters.keys() if key in self._ld.keys()}}) if self._ld is not None else None
         else:
             self.step = self.step_with_wd
             self._params = {
                 "weight_decay":{key:parameters[key] for key in parameters.keys() if 'weight' in key and self._ld and key not in self._ld.keys()},
                 'others':{key:parameters[key] for key in parameters.keys() if 'weight' not in key and self._ld and key not in self._ld.keys()},
-                "lr_decay":{
+                "lr_scale":{
                     'weight_decay': {key:(parameters[key], self._ld[key]) for key in parameters.keys() if 'weight' in key and key in self._ld.keys()},
                     'others': {key:(parameters[key], self._ld[key]) for key in parameters.keys() if 'weight' not in key and key in self._ld.keys()}
                 } if self._ld is not None else None
@@ -77,21 +77,22 @@ class BaseOptimizer:
                     p.sub_(self.lr * (gradients[k]  + self._wd*p))
                 for k,p in self._params['others'].items():
                     p.sub_(self.lr * gradients[k])
-                for k,p,ld in self._params['lr_decay']['weight_decay'].items():
+                for k,(p,ld) in self._params['lr_scale']['weight_decay'].items():
                     p.sub_(self.lr*ld*(gradients[k] + self._wd*p))
-                for k,p,ld in self._params['lr_decay']['others'].items():
+                for k,(p,ld) in self._params['lr_scale']['others'].items():
                     p.sub_(self.lr * ld*gradients[k])
             except Exception as e:
                 print(f'error in optimizer step_with_wd in {k}')
+                breakpoint()
                 raise e
     def step_with_none(self, compute_grad_fn:Callable[[],dict[str,torch.Tensor]]):
         with torch.no_grad():
             if self.clip_grad:
                 self.prev_grad_norm = self.clip_grad_norm()
             gradients = compute_grad_fn()
-            for k,p in [item for item in self._params.items() if item[0] != 'lr_decay']:
+            for k,p in [item for item in self._params.items() if item[0] != 'lr_scale']:
                 p.sub_(self.lr * gradients[k])
-            for k,p,ld in self._params['lr_decay'].items():
+            for k,p,ld in self._params['lr_scale'].items():
                 p.sub_(self.lr * ld*gradients[k])
                 
     def zero_grad(self):

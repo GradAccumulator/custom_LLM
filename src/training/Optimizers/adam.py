@@ -21,8 +21,8 @@ class Adam(BaseOptimizer):
             adam.v[k] = adam.v[k].to(adam._cached_params_as_dict[k].device)
         return adam
 
-    def __init__(self, parameters:dict, lr:float, beta1:float, beta2:float, weight_decay:float=0,*, eps=1e-8, clip_grad:float|bool=True, skip_init = False, **lr_decay):
-        super().__init__(parameters=parameters, lr=lr,weight_decay=weight_decay, lr_decay=lr_decay, clip_grad=clip_grad)
+    def __init__(self, parameters:dict, lr:float, beta1:float, beta2:float, weight_decay:float=0,*, eps=1e-8, clip_grad:float|bool=True, skip_init = False, lr_scale:dict=None):
+        super().__init__(parameters=parameters, lr=lr,weight_decay=weight_decay, lr_scale=lr_scale, clip_grad=clip_grad)
         self.b1 = beta1
         self.b2 = beta2
         self.eps = eps
