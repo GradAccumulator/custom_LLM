@@ -92,7 +92,7 @@ class BaseOptimizer:
             gradients = compute_grad_fn()
             for k,p in [item for item in self._params.items() if item[0] != 'lr_scale']:
                 p.sub_(self.lr * gradients[k])
-            for k,p,ld in self._params['lr_scale'].items():
+            for k,(p,ld) in self._params['lr_scale'].items():
                 p.sub_(self.lr * ld*gradients[k])
                 
     def zero_grad(self):

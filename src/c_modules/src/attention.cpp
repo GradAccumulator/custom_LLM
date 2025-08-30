@@ -57,6 +57,14 @@ private:
 		 return weight;
 	 }
 
+	 static torch::Tensor dropout(
+		 torch::Tensor x,
+		 float p_drop
+	 ) {
+		 if (p_drop == 0.0f)return x;
+		 return x * (torch::rand_like(x) > p_drop)/(1-p_drop);
+	 }
+
 	 //return{ out,  weight, heads };
 	 static tensor_list  attention(
 		 AutogradContext* ctx,
@@ -83,6 +91,7 @@ private:
 			 scores += causal_mask;
 		 }
 		 auto weight = softmax(scores, -1);
+		 weight = dropout(weight, p_drop);
 		 auto heads = weight.matmul(V);
 		 //(B, Nheads, seq_len, d_head)
 		 auto concated_heads = heads.transpose(1, 2).reshape({ heads.size(0), heads.size(2), num_heads * d_head });
@@ -199,10 +208,10 @@ public:
 		//weight_i.shape			      == (B, num_heads, seq_len, seq_len)
 		//V_i.shape						  == (B, num_heads, seq_len, d_head)
 		auto weight_i = saved[WEIGHT];
-		auto V_i = saved[V_idx];
+		temp = saved[V_idx];
 		auto dO_dV = weight_i.transpose(2, 3).matmul(dOi_dHeadi)
 			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
-		auto dOi_dWeighti = dOi_dHeadi.matmul(V_i.t());
+		auto dOi_dWeighti = dOi_dHeadi.matmul(temp.t());
 
 		//Bqkv 미분용 텐서 미리 할당
 		torch::Tensor dO_dBqkv;
@@ -213,8 +222,8 @@ public:
 		if (use_bias) {
 			dO_dBqkv = torch::empty(
 				qkv_bias_shape, 
-				torch::TensorOptions().device(V_i.device())
-						.dtype(V_i.dtype())
+				torch::TensorOptions().device(dO_dV.device())
+						.dtype(dO_dV.dtype())
 			);
 			temp_list = dO_dBqkv.split(num_heads * d_head);
 
@@ -248,26 +257,21 @@ public:
 		}
 
 		//weight_i = softmax(scores)
-		// scores.shape == (B, num_heads, seq_len, seq_len)
-		temp = torch::diag_embed(weight_i)
-			- weight_i.unsqueeze(-1) * weight_i.unsqueeze(-2);
-		//ㄴ> dSoftmax_i/dScores_i
-
 		//W_iqkv 미분
-		//dSoftmax_i/dScores_i.shape == (B, num_heads, seq_len, seq_len, seq_len)
 		//dO_i/dWeight_i.shape == (B, num_heads, seq_len, seq_len)
-		auto dOi_dScoresi = dOi_dWeighti.unsqueeze(3)
-			.matmul(temp.transpose(3, 4))
-			.squeeze(3);
+		//weight_i.shape == (B, num_heads, seq_len, seq_len)
+		//temp = dO_i/dScores_i
+		temp = weight_i * dOi_dWeighti;
+		temp -= weight_i * temp.sum(2, true);
 
 		// scores    = QK.T
 		// Q.shape == (B, num_heads,  seq_len, d_head)
 		// K.shape == (B, num_heads,  seq_len, d_head)
 		//dO_i/dScores_i.shape == (B, num_heads, seq_len, seq_len)
 		//Wqkv.shape				   == (d_model, num_heads*d_head*3)
-		auto dO_dQ = dOi_dScoresi.matmul(K_i)
+		auto dO_dQ = temp.matmul(K_i)
 			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
-		auto dO_dK = Q_i.matmul(dOi_dScoresi)
+		auto dO_dK = Q_i.matmul(temp)
 			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
 
 		//Q = Q*scale_qk
