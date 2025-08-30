@@ -5,21 +5,23 @@
 using namespace torch::autograd;
 using namespace std;
 
-const  map<string, int> idx = {
-	{"x", 0},
-	{"qkv_weight", 1},
-	{"output_weight", 2},
-	{"qkv_bias", 3},
-	{"output_bias", 4},
-	{"scale_qk", 5},
-	{"Q", 6},
-	{"K", 7},
-	{"V", 8},
-	{"scores", 9},
-	{"scaled_scores", 10},
-	{"weight", 11},
-	{"heads", 12}
-};
+#define X 0
+#define QKVWEIGHT 1
+#define OUTPUTWEIGHT 2
+#define SCALEQK 3
+#define Q_idx 4
+#define K_idx 5
+#define V_idx 6
+#define WEIGHT 7
+#define HEADS 8
+/*
+ctx->save_for_backward({
+	x, qkv_weight, output_weight, scale_qk,
+	Q,K,V,
+	atten_out[2], //weight (atten_weight)
+	atten_out[3], //heads
+});
+*/
 
 class CausalMaskedSelfAttetnion : public Function<CausalMaskedSelfAttetnion> {
 private:
@@ -43,8 +45,8 @@ private:
 		return QKV_splited;
 	}
 
-	 //return {scaled_scores, weight}
-	 static tensor_list softmax(
+	 //return {weight}
+	 static torch::Tensor softmax(
 		 torch::Tensor scores,
 		 int dim=-1
 	 ) {
@@ -52,10 +54,10 @@ private:
 		 auto exps = scaled_scores.exp();
 		 auto sums = exps.sum(dim, true);
 		 auto weight = exps / sums;
-		 return { scaled_scores, weight };
+		 return weight;
 	 }
 
-	 //return{ out, scores, scaled_scores, weight, heads };
+	 //return{ out,  weight, heads };
 	 static tensor_list  attention(
 		 AutogradContext* ctx,
 		 torch::Tensor Q,
@@ -80,9 +82,7 @@ private:
 				 ).triu(1);
 			 scores += causal_mask;
 		 }
-		 auto softmax_out = softmax(scores, -1);
-		 auto scaled_scores = softmax_out[0]; //scaled_scores
-		 auto weight = softmax_out[1]; //weight (atten_weight)
+		 auto weight = softmax(scores, -1);
 		 auto heads = weight.matmul(V);
 		 //(B, Nheads, seq_len, d_head)
 		 auto concated_heads = heads.transpose(1, 2).reshape({ heads.size(0), heads.size(2), num_heads * d_head });
@@ -90,7 +90,7 @@ private:
 		 if (output_bias.defined())
 			 out += output_bias;
 		 ctx->saved_data["root_d_k"] = root_d_k;
-		 return{ out, scores, scaled_scores, weight, heads };
+		 return{ out,  weight, heads };
 	 }
 
 public:
@@ -115,6 +115,10 @@ public:
 		*/
 		ctx->saved_data["num_heads"] = num_heads;
 		ctx->saved_data["d_head"] = d_head;
+		ctx->saved_data["use_bias"] = qkv_bias.defined();
+		if (qkv_bias.defined()) {
+			ctx->saved_data["qkv_bias_shape"] = qkv_bias.sizes().vec();
+		}
 		//ctx->saved_data["root_d_k"] = root_d_k;
 
 		auto QKV = get_qkv(x, qkv_weight, num_heads, d_head, qkv_bias, scale_qk);
@@ -135,12 +139,10 @@ public:
 		);
 		//{ out, scores, scaled_scores, weight, heads}
 		ctx->save_for_backward({
-			x, qkv_weight, output_weight, qkv_bias, output_bias, scale_qk,
+			x, qkv_weight, output_weight, scale_qk,
 			Q,K,V,
-			atten_out[1], //scores
-			atten_out[2], //scaled_scores
-			atten_out[3], //weight (atten_weight)
-			atten_out[4], //heads
+			atten_out[1], //weight (atten_weight)
+			atten_out[2], //heads
 		});
 		return atten_out[0]; // attention output
 	}
@@ -152,39 +154,21 @@ public:
 		AutogradContext* ctx,
 		variable_list grad_output
 	) {
-		/*ctx->save_for_backward({
-			x, qkv_weight, output_weight, qkv_bias, output_bias, scale_qk,
-			Q,K,V,
-			atten_out[1], //scores
-			atten_out[2], //scaled_scores
-			atten_out[3], //weight (atten_weight)
-			atten_out[4], //heads
-		});*/
 		auto saved = ctx->get_saved_variables();
 		auto num_heads = ctx->saved_data["num_heads"].toInt();
 		auto d_head = ctx->saved_data["d_head"].toInt();
 		auto root_d_k = ctx->saved_data["root_d_k"].toDouble();
+		auto use_bias = ctx->saved_data["use_bias"].toBool();
+		vector<int64_t> qkv_bias_shape;
 		auto grad_out = grad_output[0];
+		if(use_bias)qkv_bias_shape = ctx->saved_data["qkv_bias_shape"].toIntVector();
+		
+		torch::Tensor temp;
+		variable_list temp_list;
 
-		/*const  map<string, int> idx = {
-			{"x", 0},
-			{"qkv_weight", 1},
-			{"output_weight", 2},
-			{"qkv_bias", 3},
-			{"output_bias", 4},
-			{"scale_qk", 5},
-			{"Q", 6},
-			{"K", 7},
-			{"V", 8},
-			{"scores", 9},
-			{"scaled_scores", 10},
-			{"weight", 11},
-			{"heads", 12}
-		};*/
-		bool use_bias = saved[idx.at("output_bias")].defined();
 
 		//x.shape == (B, seq_len, d_model)
-		auto x = saved[idx.at("x")];
+		auto x = saved[X];
 		int batch = x.size(0);
 		int seq_len = x.size(1);
 
@@ -192,9 +176,9 @@ public:
 			grad_out.sum(torch::OptionalIntArrayRef({ 0,1 }))
 			: torch::Tensor();
 
-		auto Wo = saved[idx.at("output_weight")];
-		int d_model = Wo.size(-1);
-		auto head_i = saved[idx.at("heads")];
+		auto Wo = saved[OUTPUTWEIGHT];
+		int d_model = Wo.size(1);
+		auto head_i = saved[HEADS];
 		//head_i.shape == (B, num_heads, seq_len, d_head)
 		auto concated_heads = head_i.transpose(1, 2).reshape({ batch * seq_len, d_model });
 		auto concated_grad_out = grad_out.reshape({ batch * seq_len, d_model });
@@ -214,38 +198,40 @@ public:
 		//dOutputi/dHeadi.shape == (B,num_heads,seq_len, d_head)
 		//weight_i.shape			      == (B, num_heads, seq_len, seq_len)
 		//V_i.shape						  == (B, num_heads, seq_len, d_head)
-		auto weight_i = saved[idx.at("weight")];
-		auto V_i = saved[idx.at("V")];
+		auto weight_i = saved[WEIGHT];
+		auto V_i = saved[V_idx];
 		auto dO_dV = weight_i.transpose(2, 3).matmul(dOi_dHeadi)
 			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
 		auto dOi_dWeighti = dOi_dHeadi.matmul(V_i.t());
 
 		//Bqkv 미분용 텐서 미리 할당
 		torch::Tensor dO_dBqkv;
-		torch::Tensor dO_dBqkv_splited;
 		torch::Tensor dO_dBq;
 		torch::Tensor dO_dBk;
 		torch::Tensor dO_dBv;
 
 		if (use_bias) {
-			auto dO_dBqkv = torch::empty_like(saved[idx.at("qkv_bias")]);
-			auto dO_dBqkv_splited = dO_dBqkv.split(num_heads * d_head);
+			dO_dBqkv = torch::empty(
+				qkv_bias_shape, 
+				torch::TensorOptions().device(V_i.device())
+						.dtype(V_i.dtype())
+			);
+			temp_list = dO_dBqkv.split(num_heads * d_head);
 
-			auto dO_dBq = dO_dBqkv_splited[0];
-			auto dO_dBk = dO_dBqkv_splited[1];
-			auto dO_dBv = dO_dBqkv_splited[2];
+			dO_dBq = temp_list[0];
+			dO_dBk = temp_list[1];
+			dO_dBv = temp_list[2];
 		}
 		else {
-			auto dO_dBqkv = torch::Tensor();
+			dO_dBqkv = torch::Tensor();
 		}
 
 		//Wqkv 미분용 텐서 미리 할당
-		auto Q = saved[idx.at("Q")];
-		auto K = saved[idx.at("K")];
-		auto V = saved[idx.at("V")];
+		auto Q_i = saved[Q_idx];
+		auto K_i = saved[K_idx];
 
-		auto qkv_weight = saved[idx.at("qkv_weight")];
-		auto dO_dWqkv = torch::empty_like(qkv_weight);
+		auto Wqkv = saved[QKVWEIGHT];
+		auto dO_dWqkv = torch::empty_like(Wqkv);
 		auto dO_dWqkv_splited = dO_dWqkv.split(num_heads * d_head, -1);
 
 		auto dO_dWq = dO_dWqkv_splited[0];
@@ -263,31 +249,32 @@ public:
 
 		//weight_i = softmax(scores)
 		// scores.shape == (B, num_heads, seq_len, seq_len)
-		auto scores = saved[idx.at("scores")];
-		auto dSoftmaxi_dScoresi = torch::diag_embed(scores)
-			- scores.unsqueeze(-1) * scores.unsqueeze(-2);
+		temp = torch::diag_embed(weight_i)
+			- weight_i.unsqueeze(-1) * weight_i.unsqueeze(-2);
+		//ㄴ> dSoftmax_i/dScores_i
 
 		//W_iqkv 미분
 		//dSoftmax_i/dScores_i.shape == (B, num_heads, seq_len, seq_len, seq_len)
 		//dO_i/dWeight_i.shape == (B, num_heads, seq_len, seq_len)
 		auto dOi_dScoresi = dOi_dWeighti.unsqueeze(3)
-			.matmul(dSoftmaxi_dScoresi.transpose(3, 4))
+			.matmul(temp.transpose(3, 4))
 			.squeeze(3);
+
 		// scores    = QK.T
 		// Q.shape == (B, num_heads,  seq_len, d_head)
 		// K.shape == (B, num_heads,  seq_len, d_head)
 		//dO_i/dScores_i.shape == (B, num_heads, seq_len, seq_len)
 		//Wqkv.shape				   == (d_model, num_heads*d_head*3)
-		auto dO_dQ = dOi_dScoresi.matmul(K)
+		auto dO_dQ = dOi_dScoresi.matmul(K_i)
 			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
-		auto dO_dK = Q.matmul(dOi_dScoresi)
+		auto dO_dK = Q_i.matmul(dOi_dScoresi)
 			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
 
 		//Q = Q*scale_qk
 		//K = K*scale_qk
 		//scale_qk.shape == (num_heads, 1, 1)
 		//			or (1,1,1)
-		auto scale_qk = saved[idx.at("scale_qk")];
+		auto scale_qk = saved[SCALEQK];
 		torch::Tensor dO_dSqk;
 		if (scale_qk.defined() && scale_qk.requires_grad()) {
 			if (scale_qk.sizes() == c10::IntArrayRef({ num_heads, 1, 1 })) {
@@ -324,7 +311,6 @@ public:
 		//Wqkv.shape == (d_model, num_heads*d_head*3)
 		//dO/d(Q/K).shape == (batch*seq_len, num_heads*d_head)
 		//x.shape		  == (B, seq_len, d_model)
-		auto Wqkv = saved[idx.at("qkv_weight")];
 		x = x.t().reshape({ batch, seq_len, d_model });
 		auto dO_dx = dO_dQ.matmul(Wqkv.slice(-1, 0, num_heads * d_head).t())
 				.reshape({ batch, seq_len, d_model })

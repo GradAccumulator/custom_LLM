@@ -190,32 +190,32 @@ class Trainer:
         self.total_acc_in_accum = 0
         self.debug_fn = lambda:None
         for (train_x, train_label) in self.train_loader:
-                self.current_step+=1
-                
-                if self.validation and (self.current_step%self.validation_interval==0 or self.current_step==1):
-                    val_loss= self.validate()
-                
-                logits, loss = self.forward_and_compute_loss(train_x, train_label)
-                loss = loss/self.grad_accumulation
+            self.current_step+=1
+            
+            if self.validation and (self.current_step%self.validation_interval==0 or self.current_step==1):
+                val_loss= self.validate()
+            
+            logits, loss = self.forward_and_compute_loss(train_x, train_label)
+            loss = loss.float()/self.grad_accumulation
 
-                #backprop
-                loss.backward()        
-                
-                #record loss and acc
-                self.avg_loss_in_accum += loss.item()
-                
-                #tboard log
-                self.tboard_update_loss(self.avg_loss_in_accum, val_loss, logits, train_label, self.total_acc_in_accum)
-                
-                #step
-                self.step()
+            #backprop
+            loss.backward()        
+            
+            #record loss and acc
+            self.avg_loss_in_accum += loss.item()
+            
+            #tboard log
+            self.tboard_update_loss(self.avg_loss_in_accum, val_loss, logits, train_label, self.total_acc_in_accum)
+            
+            #step
+            self.step()
 
-                #debug
-                self.debug_fn()
-                debug_out = self.debug(logits, train_x, train_label, loss, val_loss)
-                if debug_out in [self.STOP, self.EXIT]:
-                    return debug_out
-                val_loss = debug_out
+            #debug
+            self.debug_fn()
+            debug_out = self.debug(logits, train_x, train_label, loss, val_loss)
+            if debug_out in [self.STOP, self.EXIT]:
+                return debug_out
+            val_loss = debug_out
         return False
     def train(self):
         try:

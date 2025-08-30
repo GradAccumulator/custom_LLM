@@ -83,12 +83,10 @@ class TransformerII:
     def state_dict(self):
         return {
             'model': self.model.state_dict(),
-            'embedding': self.embedding.state_dict(),
         }
     
     def load_state(self, state:dict):
         self.model.load_state_dict(state['model'])
-        self.embedding.load_state_dict(state['embedding'])
     
     def save(self, path):
         torch.save(self.state_dict(), path)
@@ -104,7 +102,7 @@ class TransformerII:
     def parameters_as_dict(self):
         return self.model.parameters_as_dict()
     
-    def encode(self, x:list[str],*, for_eval=False, is_dataset=False, max_length=10000) -> torch.Tensor:
+    def encode(self, x:list[str],*, is_dataset=False, max_length=10000) -> torch.Tensor:
         if not is_dataset:
             return torch.from_numpy(self.tokenizer.encode(x, seq_len=self.seq_len, is_dataset=False, max_length=max_length), device=self.device)
         input,label = self.tokenizer.encode(x, seq_len=self.seq_len, is_dataset=True, max_length=max_length)

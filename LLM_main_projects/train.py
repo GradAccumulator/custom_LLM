@@ -33,15 +33,15 @@ if __name__ == '__main__':
             val_loader = DataLoader(val_x, val_label, device='cuda')
         
         with timer("optimizer & scheduler 생성"):
-            max_lr = 1e-4
+            max_lr = 4e-4
             optimizer = Adam(
                 model.parameters_as_dict(), 
                 max_lr,
                 0.9, 0.95, 1e-2, 
                 eps=1e-8, 
-                clip_grad=1,
+                clip_grad=5,
                 lr_scale= {
-                    'layers[embedding].table':0.1
+                    'layers[embedding].table':0.4
                 }
             )
             

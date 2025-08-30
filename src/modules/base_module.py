@@ -31,7 +31,7 @@ class BaseModule(object):
                 f'keys({keys}) and state dict({state_keys}) are not same.'
             )
     
-    def init_parameter(self, d_in, d_out,p,*, init_method:str='none'):
+    def init_parameter(self, d_in, d_out,p:torch.Tensor,*, init_method:str='none'):
         init_type = init_method.lower()
         with torch.no_grad():
             if init_type == 'xavier':
