@@ -42,7 +42,8 @@ if __name__ == '__main__':
                 clip_grad=5,
                 lr_scale= {
                     'layers[embedding].table':0.4
-                }
+                },
+                device_transfer_while_conputing_mv=True
             )
             
             scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.effective_warmup_steps, decays.CosineDecay, scheduler_config.effective_total_steps, min_lr = max_lr*0.1)
