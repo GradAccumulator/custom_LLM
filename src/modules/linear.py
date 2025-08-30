@@ -43,7 +43,7 @@ class Linear(BaseModule):
         return self._use_bias
     
     def clone(self):
-        linear = Linear(self.d_in, self.d_out, device=self.device, dtype=self.dtype, init_method=self.init_method)
+        linear = Linear(self.d_in, self.d_out, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
         linear.weight = self.weight.detach().clone().requires_grad_()
         if self.use_bias:
             linear.bias = self.bias.detach().clone().requires_grad_()

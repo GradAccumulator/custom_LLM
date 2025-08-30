@@ -5,6 +5,7 @@ from .scale import Scale
 from .activation_functions import Softmax
 from .dropout import Dropout
 from src.utils.torch_utils import device_dtype_check
+import src.c_modules as _C
 
 class SelfAttention(BaseModule):
     def __init__(
@@ -45,6 +46,8 @@ class SelfAttention(BaseModule):
         
         if self.mask_type=='causal' and self.seq_len is not None:
             self.cached_mask = torch.full((self.seq_len, self.seq_len), float('-inf'), device=self.device, dtype=mask_dtype).triu(diagonal=1)
+        else:
+            self.cached_mask = None
             
         self.recip_root_d_k = 1/(self.d_head**0.5)
         self.scale_qk_value = scale_qk_value
@@ -93,6 +96,20 @@ class SelfAttention(BaseModule):
         input shape:(batch, seq_len, d_model)\n
         output shape:(batch, seq_len, d_model)
         '''
+        #if self.mask_type == 'causal':
+        return _C.causal_masked_self_attention(
+            x,
+            self.linear_qkv.weight.to(x.dtype),
+            self.linear_output.weight.to(x.dtype),
+            self.num_heads,
+            self.d_head,
+            self.seq_len,
+            self.dropout.p if self.use_dropout and self.dropout.is_training else 0.0,
+            self.linear_qkv.bias.to(x.dtype) if self.use_bias else None,
+            self.linear_output.bias.to(x.dtype) if self.use_bias else None,
+            self.scale_qk.scale.to(x.dtype) if self.use_scale else None,
+            self.cached_mask.to(x.dtype) if self.cached_mask is not None else None,
+        )
         Q,K,V = self._get_qkv(x)
         atten_out = self._attention(Q, K, V, x.shape[1]).transpose(1,2).reshape(x.shape[0], x.shape[1], self.num_heads*self.d_head)
         out = self.linear_output(atten_out)
@@ -166,13 +183,13 @@ class SelfAttention(BaseModule):
         scale_qk_repr = ''
         if hasattr(self, 'scale_qk'):
             scale_qk_repr = (
-                f'scale_qk_value={self.scale_qk_value}\n'
-                f'learnable_scale_qk={self.scale_qk.learnable}\n'
+                f'    scale_qk_value={self.scale_qk_value}\n'
+                f'    learnable_scale_qk={self.scale_qk.learnable}\n'
             )
             if self.scale_qk.learnable:
                 scale_qk_repr += (
-                    f"<<scale_qk>>\n"
-                    f'{repr(self.scale_qk.scale.flatten())}\n'
+                    f"    <<scale_qk>>\n"
+                    f'    {repr(self.scale_qk.scale.flatten())}\n'
                 )
         return (
             f'SelfAttention(\n'
@@ -184,6 +201,7 @@ class SelfAttention(BaseModule):
             f'    mask_type={self.mask_type},\n'
             f'    seq_len={self.seq_len},\n'
             f'    dropout_p={self.dropout.p if self.use_dropout else 0.0},\n'
+            f'    use_bias={self.use_bias},\n'
             +scale_qk_repr+
             f'    mask_dtype={self.mask_dtype}\n'
             f')'
