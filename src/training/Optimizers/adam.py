@@ -90,7 +90,6 @@ class Adam(BaseOptimizer):
     def __repr__(self):
         return (
             f"Adam(\n"
-            f'    parameter keys={list(self.parameters_as_dict().keys())},\n'
             f'    lr={self.lr},\n'
             f'    beta1={self.b1},\n'
             f'    beta2={self.b2},\n'

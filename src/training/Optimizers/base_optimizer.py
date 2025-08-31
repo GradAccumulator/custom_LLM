@@ -2,7 +2,7 @@ import torch
 from typing import Callable
 
 class BaseOptimizer:
-    def __init__(self, parameters:dict[str, torch.tensor], lr:float, weight_decay:float=0, clip_grad:float|bool=True, lr_scale:dict=None):
+    def __init__(self, parameters:dict[str, torch.tensor], lr:float, weight_decay:float=0, clip_grad:float|bool=True, lr_scale:dict={}):
         '''
         parameters: a dict of parameters                                                    \n
         lr: learning rate                                                                   \n                          
@@ -10,8 +10,7 @@ class BaseOptimizer:
         clip_grad: Whether to apply gradient clipping during training. or max norm. if you set clip_grad as True, the max norm is set to 1
         '''
         self.lr = lr
-        self._wd = weight_decay
-        self._ld = lr_scale
+        self._ld = lr_scale or {}
         self._cached_params_as_dict = parameters
         self._cached_params_as_list = list(self._cached_params_as_dict.values())
         self.weight_decay = weight_decay
@@ -48,17 +47,24 @@ class BaseOptimizer:
         parameters = self.parameters_as_dict()
         if wd == 0:
             self.step = self.step_with_none
-            self._params = {key:parameters[key] for key in parameters.keys() if self._ld and key not in self._ld.keys()}
-            self._params.update({"lr_scale":{key:(parameters[key], self._ld[key]) for key in parameters.keys() if key in self._ld.keys()}}) if self._ld is not None else None
+            self._params = {key:parameters[key] for key in parameters.keys() if key not in self._ld.keys()}
+            self._params.update({
+                "lr_scale":{
+                    key:(parameters[key], self._ld[key]) 
+                        for key in parameters.keys() if key in self._ld.keys()
+                } 
+            })
         else:
             self.step = self.step_with_wd
             self._params = {
-                "weight_decay":{key:parameters[key] for key in parameters.keys() if 'weight' in key and self._ld and key not in self._ld.keys()},
-                'others':{key:parameters[key] for key in parameters.keys() if 'weight' not in key and self._ld and key not in self._ld.keys()},
-                "lr_scale":{
-                    'weight_decay': {key:(parameters[key], self._ld[key]) for key in parameters.keys() if 'weight' in key and key in self._ld.keys()},
-                    'others': {key:(parameters[key], self._ld[key]) for key in parameters.keys() if 'weight' not in key and key in self._ld.keys()}
-                } if self._ld is not None else None
+                "weight_decay":{key:parameters[key] for key in parameters.keys() if 'weight' in key and key not in self._ld.keys()},
+                'others':{key:parameters[key] for key in parameters.keys() if 'weight' not in key and key not in self._ld.keys()},
+                "lr_scale":({
+                    'weight_decay': {key:(parameters[key], self._ld[key]) for key in parameters.keys() if 
+                        'weight' in key and key in self._ld.keys()},
+                    'others': {key:(parameters[key], self._ld[key]) for key in parameters.keys() if 
+                        'weight' not in key and key in self._ld.keys()}
+                })
             }
     
     def clip_grad_norm(self):

@@ -60,7 +60,7 @@ private:
 	) {
 		if (p_drop == 0.0f)return {x, torch::Tensor()};
 
-		auto mask = (torch::rand_like(x) > p_drop)/(1-p_drop);
+		auto mask = ((torch::rand_like(x) > p_drop)/(1-p_drop)).to(x.dtype());
 		return {x*mask, mask};
 	}
 
@@ -176,7 +176,6 @@ public:
 		
 		torch::Tensor temp;
 		torch::autograd::variable_list temp_list;
-
 
 		//x.shape == (B, seq_len, d_model)
 		auto x = saved[X];

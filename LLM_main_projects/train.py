@@ -40,9 +40,6 @@ if __name__ == '__main__':
                 0.9, 0.95, 1e-2, 
                 eps=1e-8, 
                 clip_grad=5,
-                lr_scale= {
-                    'layers[embedding].table':0.4
-                },
                 device_transfer_while_conputing_mv=True
             )
             

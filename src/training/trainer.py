@@ -133,8 +133,7 @@ class Trainer:
             pygame.mixer.music.play()
             while pygame.mixer.music.get_busy():
                 sleep(0.1)
-        
-        torch.utils.cpp_extension
+    
     def check_nan_and_inf(self, tensor:torch.Tensor, name):
         
         if tensor.isnan().any():
