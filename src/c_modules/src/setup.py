@@ -2,25 +2,16 @@ from torch.utils.cpp_extension import load
 import torch
 Tensor = torch.Tensor
 from os import path
-_attention = load(name="attention", sources=[path.join(path.dirname(__file__), "attention.cpp")])
-_computeMV_wrapper = load(name='computeMV_wrapper', sources=[path.join(path.dirname(__file__), "device_transfer.cpp")])
 
-
-'''
-torch::Tensor causal_masked_self_attention(
-	const torch::Tensor& x,
-	const torch::Tensor& qkv_weight,
-	const torch::Tensor& output_weight,
-	int num_heads,
-	int d_head,
-	int seq_len,
-	const torch::Tensor qkv_bias = torch::Tensor(),
-	const torch::Tensor output_bias = torch::Tensor(),
-	const torch::Tensor scale_qk = torch::Tensor(),
-	const torch::Tensor cached_causal_mask = torch::Tensor(),
-	float p_drop = 0.0f
+_attention = load(
+    name="attention", 
+    sources=[path.join(path.dirname(__file__), "attention.cpp")]
 )
-'''
+_computeMV_wrapper = load(
+    name='computeMV_wrapper', 
+    sources=[path.join(path.dirname(__file__), "device_transfer.cpp")]
+)
+
 def causal_masked_self_attention(
     x:Tensor, 
     qkv_weight:Tensor, 
@@ -48,24 +39,10 @@ def causal_masked_self_attention(
         cached_causal_mask if cached_causal_mask is not None else torch.empty(0)
     )
 
-
-'''void ComputeMV_Wrapper(
-	const map<string, torch::Tensor>& params,
-	map<string, torch::Tensor>& m,
-	map<string, torch::Tensor>& v,
-	map<string, torch::Tensor>& updated,
-	int t,
-	double b1,
-	double b2,
-	double eps,
-	bool move_device,
-	torch::Device device
-) {
-'''
 def computeMV_wrapper(
-    params:dict[str, torch.Tensor], 
-    m:dict[str, torch.Tensor], 
-    v:dict[str, torch.Tensor], 
+    params:dict[str, Tensor], 
+    m:dict[str, Tensor], 
+    v:dict[str, Tensor], 
     t:int, 
     b1:float, 
     b2:float, 

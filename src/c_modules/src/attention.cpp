@@ -18,12 +18,13 @@ using namespace std;
 #define V_idx 6
 #define WEIGHT 7
 #define HEADS 8
+#define ATTENMASK 9
 
 class CausalMaskedSelfAttention : public torch::autograd::Function<CausalMaskedSelfAttention> {
 private:
 	
 	//return torch::autograd::tensor_list({Q,K,V})
-	 static torch::autograd::tensor_list get_qkv(
+	static torch::autograd::tensor_list get_qkv(
 		const torch::Tensor& x,
 		const torch::Tensor& qkv_weight,
 		int num_heads,
@@ -42,27 +43,29 @@ private:
 	}
 
 	 //return {weight}
-	 static torch::Tensor softmax(
+	static torch::Tensor softmax(
 		const  torch::Tensor& scores,
-		 int dim=-1
-	 ) {
-		 auto scaled_scores = scores - get<0>(scores.max(dim, true));
-		 auto exps = scaled_scores.exp();
-		 auto sums = exps.sum(dim, true);
-		 auto weight = exps / sums;
-		 return weight;
-	 }
+		int dim=-1
+	) {
+		auto scaled_scores = scores - get<0>(scores.max(dim, true));
+		auto exps = scaled_scores.exp();
+		auto sums = exps.sum(dim, true);
+		auto weight = exps / sums;
+		return weight;
+	}
 
-	 static torch::Tensor dropout(
-		 torch::Tensor& x,
-		 float p_drop
-	 ) {
-		 if (p_drop == 0.0f)return x;
-		 return x * (torch::rand_like(x) > p_drop)/(1-p_drop);
-	 }
+	static torch::autograd::tensor_list dropout(
+		torch::Tensor& x,
+		float p_drop
+	) {
+		if (p_drop == 0.0f)return {x, torch::Tensor()};
 
-	 //return{ out,  weight, heads };
-	 static torch::autograd::tensor_list  attention(
+		auto mask = (torch::rand_like(x) > p_drop)/(1-p_drop);
+		return {x*mask, mask};
+	}
+
+	 //return{ out,  weight, heads, mask };
+	static torch::autograd::tensor_list  attention(
 		torch::autograd::AutogradContext* ctx,
 		const  torch::Tensor& Q,
 		const  torch::Tensor& K,
@@ -74,29 +77,31 @@ private:
 		int seq_len,
 		float p_drop,
 		const  torch::Tensor& cached_causal_mask
-		 ) {
-		 auto root_d_k = sqrt(d_head);
-		 auto scores = Q.matmul(K.transpose(-1, -2)) /root_d_k;
-		 if (cached_causal_mask.numel()>0 && seq_len == Q.size(2))
-			 scores += cached_causal_mask;
-		 else {
-			 auto causal_mask = torch::full(
-				 { Q.size(2), Q.size(2) }, -1e8, 
-					 torch::TensorOptions().device(Q.device()).dtype(Q.dtype())
-				 ).triu(1);
-			 scores += causal_mask;
-		 }
-		 auto weight = softmax(scores, -1);
-		 weight = dropout(weight, p_drop);
-		 auto heads = weight.matmul(V);
-		 //(B, Nheads, seq_len, d_head)
-		 auto concated_heads = heads.transpose(1, 2).reshape({ heads.size(0), heads.size(2), num_heads * d_head });
-		 auto out = concated_heads.matmul(output_weight);
-		 if (output_bias.numel()>0)
-			 out += output_bias;
-		 ctx->saved_data["root_d_k"] = root_d_k;
-		 return{ out,  weight, heads };
-	 }
+		) {
+		auto root_d_k = sqrt(d_head);
+		auto scores = Q.matmul(K.transpose(-1, -2)) /root_d_k;
+		if (cached_causal_mask.numel()>0 && seq_len == Q.size(2))
+			scores += cached_causal_mask;
+		else {
+			auto causal_mask = torch::full(
+				{ Q.size(2), Q.size(2) }, -1e8, 
+					torch::TensorOptions().device(Q.device()).dtype(Q.dtype())
+				).triu(1);
+			scores += causal_mask;
+		}
+		auto weight = softmax(scores, -1);
+		auto droput_out = dropout(weight, p_drop);
+		auto mask = droput_out[1];
+		weight = droput_out[0];
+		auto heads = weight.matmul(V);
+		//(B, Nheads, seq_len, d_head)
+		auto concated_heads = heads.transpose(1, 2).reshape({ heads.size(0), heads.size(2), num_heads * d_head });
+		auto out = concated_heads.matmul(output_weight);
+		if (output_bias.numel()>0)
+			out += output_bias;
+		ctx->saved_data["root_d_k"] = root_d_k;
+		return{ out,  weight, heads, mask};
+	}
 
 public:
 	static torch::Tensor forward(
@@ -148,6 +153,7 @@ public:
 			Q,K,V,
 			atten_out[1], //weight (atten_weight)
 			atten_out[2], //heads
+			atten_out[3], //mask
 		});
 		return atten_out[0]; // attention output
 	}
@@ -207,7 +213,7 @@ public:
 		temp = saved[V_idx];
 		auto dO_dV = weight_i.transpose(2, 3).matmul(dOi_dHeadi)
 			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
-		auto dOi_dWeighti = dOi_dHeadi.matmul(temp.transpose(2, 3));
+		auto dOi_dWeighti = dOi_dHeadi.matmul(temp.transpose(2, 3)) * saved[ATTENMASK];
 
 		//Bqkv �̺п� �ټ� �̸� �Ҵ�
 		torch::Tensor dO_dBqkv;
@@ -266,9 +272,11 @@ public:
 		//dO_i/dScores_i.shape == (B, num_heads, seq_len, seq_len)
 		//Wqkv.shape				   == (d_model, num_heads*d_head*3)
 		auto dO_dQ = temp.matmul(K_i)
-			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
+			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head })
+			/ root_d_k;
 		auto dO_dK = Q_i.transpose(2,3).matmul(temp)
-			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
+			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head })
+			/ root_d_k;
 
 		//Q = Q*scale_qk
 		//K = K*scale_qk
@@ -283,6 +291,7 @@ public:
 					+ dO_dQ.reshape({ batch, seq_len, num_heads, d_head }).transpose(2,3)
 						.sum({ 0,1,2 });
 
+				/*
 				temp = scale_qk.reshape({ num_heads, 1 });
 				dO_dK = dO_dK.reshape({ batch * seq_len, num_heads, d_head })
 					* temp;
@@ -291,11 +300,12 @@ public:
 
 				dO_dK = dO_dK.reshape({ batch * seq_len, num_heads * d_head });
 				dO_dQ = dO_dQ.reshape({ batch * seq_len, num_heads * d_head });
+				*/
 			}
 			else {
 				dO_dSqk = dO_dK.sum() + dO_dQ.sum();
-				dO_dK *= scale_qk;
-				dO_dQ *= scale_qk;
+				//dO_dK *= scale_qk;
+				//dO_dQ *= scale_qk;
 			}
 			dO_dSqk = dO_dSqk.reshape_as(scale_qk);
 		}

@@ -123,21 +123,34 @@ class Trainer:
                     ("perplexity/train"      , self.train_perp   , self.effective_step, True ),
                     ("perplexity/validation" , self.val_perp     , self.effective_step, True )
                 )
-                
+    
+    def alert(self):
+        import pygame
+        from time import sleep
+        pygame.mixer.init()
+        pygame.mixer.music.load("C:\\Users\\GIGABYTE\\Downloads\\99412B355CF6B93806.mp3")
+        for _ in range(3):
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                sleep(0.1)
+        
+        torch.utils.cpp_extension
     def check_nan_and_inf(self, tensor:torch.Tensor, name):
         
         if tensor.isnan().any():
             print(f"[Trainer] {name} is nan!!!!!")
+            self.alert()
             option = get_option('debuging? or exit? or clipping?', ['d', 'e', 'c'])
             if option == 'd':
                 breakpoint()
             elif option == 'e':
                 raise ValueError(f"[Trainer] {name} is nan!!!!!")
             elif option == 'c':
-                tensor = tensor.nan_to_num()
+                tensor.nan_to_num_(0)
         
         elif tensor.isinf().any():
             print(f"[Trainer] {name} is inf!!!!!")
+            self.alert()
             option = get_option('debuging? or exit? or clipping?', ['d', 'e', 'c'])
             if option == 'd':
                 breakpoint()
