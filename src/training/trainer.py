@@ -59,6 +59,7 @@ class Trainer:
                 logits = self.model(val_x)
                 size_rate = self.val_loader.current_size_rate()
                 avg_loss += self.loss_fn(logits,val_label).item()*size_rate
+        avg_loss *= self.loss_fn.recip_loss_scale
         clear_memory()
         self.model.train()
         self.val_perp = torch.e**avg_loss
@@ -137,15 +138,20 @@ class Trainer:
     def check_nan_and_inf(self, tensor:torch.Tensor, name):
         
         if tensor.isnan().any():
-            print(f"[Trainer] {name} is nan!!!!!")
+            error_msg = f"[Trainer] {name} is nan!!!!!"
+            print(error_msg)
+            self.logger.write(error_msg)
             self.alert()
             option = get_option('debuging? or exit? or clipping?', ['d', 'e', 'c'])
             if option == 'd':
                 breakpoint()
             elif option == 'e':
-                raise ValueError(f"[Trainer] {name} is nan!!!!!")
+                self.logger.write("Error Raised")
+                raise ValueError(error_msg)
             elif option == 'c':
                 tensor.nan_to_num_(0)
+                self.logger.write("LossClipped to {}".format(tensor))
+                return tensor
         
         elif tensor.isinf().any():
             print(f"[Trainer] {name} is inf!!!!!")
@@ -192,7 +198,9 @@ class Trainer:
     def forward_and_compute_loss(self, train_x, train_label) -> tuple[torch.Tensor, torch.Tensor]:
         logits = self.model(train_x)
         loss = self.loss_fn(logits, train_label)
-        self.check_nan_and_inf(loss, "loss")
+        out = self.check_nan_and_inf(loss, "loss")
+        if out is not None:
+            loss = out
         return logits, loss
         
     def train_one_epoch(self):
@@ -214,7 +222,7 @@ class Trainer:
             loss.backward()        
             
             #record loss and acc
-            self.avg_loss_in_accum += loss.item()
+            self.avg_loss_in_accum += loss.item()*self.loss_fn.recip_loss_scale
             
             #tboard log
             self.tboard_update_loss(self.avg_loss_in_accum, val_loss, logits, train_label, self.total_acc_in_accum)
@@ -287,9 +295,9 @@ class Trainer:
         torch.save(state, self.config.TRAINER_SAVE_PATH)
         print("checkpoint 저장 완료")
     @staticmethod
-    def load_checkpoint(config, logger, loss_fn_type,  optimizer_type, model_type, dataloader_type, act_fn,scheduler_type=None, warmup_type=None, decay_type=None, tboard_manager=None):
+    def load_checkpoint(config, logger, loss_fn_type,  optimizer_type, model, dataloader_type, act_fn,scheduler_type=None, warmup_type=None, decay_type=None, tboard_manager=None):
         state = torch.load(config.TRAINER_SAVE_PATH)
-        model = model_type.load_state(config.tokenizer,act_fn,state['model'])
+        model.load_state(config.tokenizer,act_fn,state['model'])
         optimizer=optimizer_type.load_state(model.params,state['optimizer'])
         trainer = Trainer(
             model=model,
@@ -310,7 +318,6 @@ class Trainer:
         trainer.total_acc_in_accum = state['total_acc_in_accum']
         trainer.effective_step = optimizer.step
         return trainer
-    
     
     def __del__(self):
         self.tboard_manager.close()

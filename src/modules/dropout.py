@@ -8,8 +8,8 @@ class Dropout:
     def forward(self, x):
         if not self._is_training:
             return x
-        mask = (torch.rand_like(x, dtype=torch.float16, device=x.device) < self.p)
-        return x * mask
+        mask = (torch.rand(x.shape[-2:], device=x.device, dtype=torch.float16) > self.p)
+        return (x * mask)/(1 - self.p)
         
     @property
     def mode(self):

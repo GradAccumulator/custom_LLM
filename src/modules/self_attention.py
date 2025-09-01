@@ -96,20 +96,20 @@ class SelfAttention(BaseModule):
         input shape:(batch, seq_len, d_model)\n
         output shape:(batch, seq_len, d_model)
         '''
-        #if self.mask_type == 'causal':
-        return _C.causal_masked_self_attention(
-            x,
-            self.linear_qkv.weight.to(x.dtype),
-            self.linear_output.weight.to(x.dtype),
-            self.num_heads,
-            self.d_head,
-            self.seq_len,
-            self.dropout.p if self.use_dropout and self.dropout.is_training else 0.0,
-            self.linear_qkv.bias.to(x.dtype) if self.use_bias else None,
-            self.linear_output.bias.to(x.dtype) if self.use_bias else None,
-            self.scale_qk.scale.to(x.dtype) if self.use_scale else None,
-            self.cached_mask.to(x.dtype) if self.cached_mask is not None else None,
-        )
+        if self.mask_type == 'causal':
+            return _C.causal_masked_self_attention(
+                x,
+                self.linear_qkv.weight,
+                self.linear_output.weight,
+                self.num_heads,
+                self.d_head,
+                self.seq_len,
+                self.dropout.p if self.use_dropout and self.dropout.is_training else 0.0,
+                self.linear_qkv.bias if self.use_bias else None,
+                self.linear_output.bias if self.use_bias else None,
+                self.scale_qk.scale if self.use_scale else None,
+                self.cached_mask if self.cached_mask is not None else None,
+            )
         Q,K,V = self._get_qkv(x)
         atten_out = self._attention(Q, K, V, x.shape[1]).transpose(1,2).reshape(x.shape[0], x.shape[1], self.num_heads*self.d_head)
         out = self.linear_output(atten_out)

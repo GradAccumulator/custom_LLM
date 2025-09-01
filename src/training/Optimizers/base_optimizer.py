@@ -2,7 +2,7 @@ import torch
 from typing import Callable
 
 class BaseOptimizer:
-    def __init__(self, parameters:dict[str, torch.tensor], lr:float, weight_decay:float=0, clip_grad:float|bool=True, lr_scale:dict={}):
+    def __init__(self, parameters:dict[str, torch.tensor], lr:float, weight_decay:float=0, clip_grad:float|bool=True, lr_scale:dict={}, loss_scale:float=1):
         '''
         parameters: a dict of parameters                                                    \n
         lr: learning rate                                                                   \n                          
@@ -14,6 +14,7 @@ class BaseOptimizer:
         self._cached_params_as_dict = parameters
         self._cached_params_as_list = list(self._cached_params_as_dict.values())
         self.weight_decay = weight_decay
+        self.recip_loss_scale = 1/loss_scale
         if isinstance(clip_grad, float|int):
             self.max_grad_norm = clip_grad
             self.clip_grad = True
@@ -70,7 +71,7 @@ class BaseOptimizer:
     def clip_grad_norm(self):
         with torch.no_grad():
             if self.clip_grad:
-                return torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=self.max_grad_norm)
+                return torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=self.max_grad_norm)*self.recip_loss_scale
         return None
 
     def step_with_wd(self, compute_grad_fn:Callable[[],dict[str,torch.Tensor]]):
@@ -82,11 +83,11 @@ class BaseOptimizer:
                 for k, p in self._params['weight_decay'].items():
                     p.sub_(self.lr * (gradients[k]  + self._wd*p))
                 for k,p in self._params['others'].items():
-                    p.sub_(self.lr * gradients[k])
+                    p.sub_(self.lr  * gradients[k])
                 for k,(p,ld) in self._params['lr_scale']['weight_decay'].items():
-                    p.sub_(self.lr*ld*(gradients[k] + self._wd*p))
+                    p.sub_(self.lr * ld*( gradients[k] + self._wd*p))
                 for k,(p,ld) in self._params['lr_scale']['others'].items():
-                    p.sub_(self.lr * ld*gradients[k])
+                    p.sub_(self.lr  * ld*gradients[k])
             except Exception as e:
                 print(f'error in optimizer step_with_wd in {k}')
                 breakpoint()
@@ -97,9 +98,9 @@ class BaseOptimizer:
                 self.prev_grad_norm = self.clip_grad_norm()
             gradients = compute_grad_fn()
             for k,p in [item for item in self._params.items() if item[0] != 'lr_scale']:
-                p.sub_(self.lr * gradients[k])
+                p.sub_(self.lr  * gradients[k])
             for k,(p,ld) in self._params['lr_scale'].items():
-                p.sub_(self.lr * ld*gradients[k])
+                p.sub_(self.lr  * ld*gradients[k])
                 
     def zero_grad(self):
         with torch.no_grad():

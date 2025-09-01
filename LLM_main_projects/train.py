@@ -19,11 +19,12 @@ from src.modules.loss_functions    import CrossEntropyLoss
 from src.utils.dev_utils           import timer, parent_timer
 from PATHES import PATHES
 
+load_checkpoint = True
 if __name__ == '__main__':
     with parent_timer("학습 전 설정"):
         with timer("모델 생성"):
             model = TransformerII(**transformer_config)
-        
+            
         with timer("데이터 전처리"):
             preprocessor = NLP_Preprocessor(model, preprocessor_config)
             train_x,train_label, val_x, val_label = preprocessor()
@@ -40,10 +41,14 @@ if __name__ == '__main__':
                 0.9, 0.95, 1e-2, 
                 eps=1e-8, 
                 clip_grad=5,
-                device_transfer_while_conputing_mv=True
+                device_transfer_while_conputing_mv=True,
+                lr_scale={
+                    'layers[embedding].table': 0.4
+                },
+                loss_scale=0.1
             )
             
-            scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.effective_warmup_steps, decays.CosineDecay, scheduler_config.effective_total_steps, min_lr = max_lr*0.1)
+            scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.effective_warmup_steps, decays.CosineDecay, scheduler_config.effective_total_steps, min_lr = max_lr*0.001)
         
         with timer("logger & tboard_manager 생성"):
             logger = Logger(logger_config.logs_dir)
@@ -55,6 +60,7 @@ if __name__ == '__main__':
                 ignore_label_indices=[0], 
                 stability_scale=0.1,
                 weight_device='cuda',
+                loss_scale=1/optimizer.recip_loss_scale
             )
             
             trainer_config = TrainerConfig(
@@ -72,10 +78,23 @@ if __name__ == '__main__':
                 tboard_manager=tboard_manager,
                 scheduler=scheduler,
                 validation=True,
-                validation_interval=27,
+                validation_interval=32,
                 tboard_update_interval=1,
                 log_interval=1
             )
             
             trainer = Trainer(config=trainer_config, **trainer_config)
+            
+            # trainer = Trainer.load_checkpoint(
+            #     config=trainer_config,
+            #     logger=logger,
+            #     loss_fn_type=CrossEntropyLoss,
+            #     optimizer_type=Adam,
+            #     model=model,
+            #     dataloader_type=DataLoader,
+            #     act_fn=model.act_fn,
+            #     scheduler_type=Scheduler,
+            #     warmup_type=warmups.LinearWarmup,
+            #     decay_type=decays.CosineDecay
+            # )
     trainer.train()

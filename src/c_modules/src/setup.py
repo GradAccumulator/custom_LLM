@@ -3,14 +3,16 @@ import torch
 Tensor = torch.Tensor
 from os import path
 
-_attention = load(
-    name="attention", 
-    sources=[path.join(path.dirname(__file__), "attention.cpp")]
-)
 _computeMV_wrapper = load(
     name='computeMV_wrapper', 
     sources=[path.join(path.dirname(__file__), "device_transfer.cpp")]
 )
+print("load device_transfer")
+_attention = load(
+    name="attention", 
+    sources=[path.join(path.dirname(__file__), "attention.cpp")]
+)
+print("load attention")
 
 def causal_masked_self_attention(
     x:Tensor, 

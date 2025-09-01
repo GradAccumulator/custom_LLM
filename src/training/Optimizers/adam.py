@@ -22,11 +22,11 @@ class Adam(BaseOptimizer):
             adam.v[k] = adam.v[k].to(adam._cached_params_as_dict[k].device)
         return adam
 
-    def __init__(self, parameters:dict, lr:float, beta1:float, beta2:float, weight_decay:float=0,*, eps=1e-8, clip_grad:float|bool=True, skip_init = False, lr_scale:dict=None, device_transfer_while_conputing_mv = False):
+    def __init__(self, parameters:dict, lr:float, beta1:float, beta2:float, weight_decay:float=0,*, eps=1e-8, clip_grad:float|bool=True, skip_init = False, lr_scale:dict=None, device_transfer_while_conputing_mv = False, loss_scale=1.0):
         '''
         device_transfer_while_conputing_mv: If True, m and v are transferred to the parameters' device only during their computation. please set True when grad_accumulation is large
         '''
-        super().__init__(parameters=parameters, lr=lr,weight_decay=weight_decay, lr_scale=lr_scale, clip_grad=clip_grad)
+        super().__init__(parameters=parameters, lr=lr,weight_decay=weight_decay, lr_scale=lr_scale, clip_grad=clip_grad, loss_scale=loss_scale)
         self.b1 = beta1
         self.b2 = beta2
         self.eps = eps

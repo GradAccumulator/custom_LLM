@@ -11,6 +11,7 @@ class CrossEntropyLoss(LossFunction):
             weight_device           ='cpu',
             stability_scale         =1.0,
             weight:Path|PathLike|ListLike|dict=None, 
+            loss_scale              =1.0
         ):
         self.logit_input = logit_input
         self.ignore_indices = torch.tensor(ignore_label_indices, device=weight_device)
@@ -23,10 +24,12 @@ class CrossEntropyLoss(LossFunction):
         self.stability_scale = stability_scale
         self.recip_stability_scale = 1.0/self.stability_scale
         self.device = weight_device
+        self.loss_scale = loss_scale
+        self.recip_loss_scale = 1.0/loss_scale
         
     def to(self, device=None, dtype=None):
         _,dtype = device_dtype_check(device, dtype)
-        if self.dtype==dtype or dtype is None:
+        if self.device==device or device is None:
             return self
         new= CrossEntropyLoss(logit_input=self.logit_input, ignore_label_indices=self.ignore_indices, dim=self.dim, weight_device=self.device, stability_scale=self.stability_scale, weight=self.weight)
         return new
@@ -39,7 +42,8 @@ class CrossEntropyLoss(LossFunction):
             f'dim={self.dim}, \n\t'
             f'weight={self.weight}, \n\t'
             f'device={self.device}, \n\t'
-            f'stability_scale={self.stability_scale}\n'
+            f'stability_scale={self.stability_scale}\n\t'
+            f'loss_scale={self.loss_scale}\n'
             ')'
         )
         
@@ -104,9 +108,12 @@ class CrossEntropyLoss(LossFunction):
         loss = self._apply_ignore_indices(loss, label)
         
         return self._apply_unreduction_scale(loss)
+    
+    def forward(self, pred, label):
+        return self.cross_entropy_loss(pred, label)*self.loss_scale
 
     def __call__(self, pred, label):
-        return self.cross_entropy_loss(pred, label)
+        return self.forward(pred, label)
     
     @property
     def weight(self):
