@@ -30,9 +30,6 @@ class Embedding(BaseModule):
     @property
     def device(self):
         return self.table.device
-    @device.setter
-    def device(self, device):
-        return
     
     def to(self, device=None, dtype=None):
         device, dtype = device_dtype_check(device, dtype)
@@ -58,10 +55,13 @@ class Embedding(BaseModule):
             'd_out':self.d_out,
             'dtype':self.dtype,
             'device':self.device,
-            'table':self.table.cpu().detach().clone()
+            'table':self.table.cpu().detach().clone(),
+            'grad':self.table.grad.cpu().detach().clone() if self.table.grad is not None else None
         }
     @staticmethod
     def load_state(state:dict):
         embd = Embedding(state['d_in'], state['d_out'], state['dtype'], state['device'])
-        embd.table = state['weight'].detach().to(state['device']).requires_grad_()
+        embd.table = state['table'].detach().to(state['device']).requires_grad_()
+        if state['grad'] is not None:
+            embd.table.grad = state['grad'].detach().to(state['device'])    
         return embd

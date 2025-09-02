@@ -34,17 +34,14 @@ if __name__ == '__main__':
             val_loader = DataLoader(val_x, val_label, device='cuda')
         
         with timer("optimizer & scheduler 생성"):
-            max_lr = 4e-4
+            max_lr = 1e-4
             optimizer = Adam(
                 model.parameters_as_dict(), 
                 max_lr,
-                0.9, 0.95, 1e-2, 
+                0.9, 0.98, 1e-2, 
                 eps=1e-8, 
                 clip_grad=5,
                 device_transfer_while_conputing_mv=True,
-                lr_scale={
-                    'layers[embedding].table': 0.4
-                },
                 loss_scale=0.1
             )
             
@@ -57,8 +54,7 @@ if __name__ == '__main__':
         with timer("loss 함수& trainer 생성"):
             loss_fn = CrossEntropyLoss(
                 logit_input=True, 
-                ignore_label_indices=[0], 
-                stability_scale=0.1,
+                ignore_label_indices=[0],
                 weight_device='cuda',
                 loss_scale=1/optimizer.recip_loss_scale
             )

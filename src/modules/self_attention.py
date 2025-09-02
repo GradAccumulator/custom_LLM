@@ -122,7 +122,7 @@ class SelfAttention(BaseModule):
         device, dtype = device_dtype_check(device, dtype)
         new = self.init_like()
         device = device or self.device
-        dtype = dtype or self.device
+        dtype = dtype or self.dtype
         new.linear_qkv = self.linear_qkv.to(device, dtype)
         new.linear_output = self.linear_output.to(device, dtype)
         new.cached_mask = self.cached_mask.to(device, dtype)

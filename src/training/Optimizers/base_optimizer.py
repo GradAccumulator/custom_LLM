@@ -71,7 +71,7 @@ class BaseOptimizer:
     def clip_grad_norm(self):
         with torch.no_grad():
             if self.clip_grad:
-                return torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=self.max_grad_norm)*self.recip_loss_scale
+                return torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=self.max_grad_norm/self.recip_loss_scale)*self.recip_loss_scale
         return None
 
     def step_with_wd(self, compute_grad_fn:Callable[[],dict[str,torch.Tensor]]):
