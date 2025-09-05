@@ -60,12 +60,10 @@ class BaseOptimizer:
             self._params = {
                 "weight_decay":{key:parameters[key] for key in parameters.keys() if 'weight' in key and key not in self._ld.keys()},
                 'others':{key:parameters[key] for key in parameters.keys() if 'weight' not in key and key not in self._ld.keys()},
-                "lr_scale":({
-                    'weight_decay': {key:(parameters[key], self._ld[key]) for key in parameters.keys() if 
-                        'weight' in key and key in self._ld.keys()},
-                    'others': {key:(parameters[key], self._ld[key]) for key in parameters.keys() if 
-                        'weight' not in key and key in self._ld.keys()}
-                })
+                'ls_weight_decay': {key:(parameters[key], self._ld[key]) for key in parameters.keys() if 
+                    'weight' in key and key in self._ld.keys()},
+                'ls_others': {key:(parameters[key], self._ld[key]) for key in parameters.keys() if 
+                    'weight' not in key and key in self._ld.keys()}
             }
     
     def clip_grad_norm(self):
@@ -84,9 +82,9 @@ class BaseOptimizer:
                     p.sub_(self.lr * (gradients[k]  + self._wd*p))
                 for k,p in self._params['others'].items():
                     p.sub_(self.lr  * gradients[k])
-                for k,(p,ld) in self._params['lr_scale']['weight_decay'].items():
+                for k,(p,ld) in self._params['ls_weight_decay'].items():
                     p.sub_(self.lr * ld*( gradients[k] + self._wd*p))
-                for k,(p,ld) in self._params['lr_scale']['others'].items():
+                for k,(p,ld) in self._params['ls_others'].items():
                     p.sub_(self.lr  * ld*gradients[k])
             except Exception as e:
                 print(f'error in optimizer step_with_wd in {k}')

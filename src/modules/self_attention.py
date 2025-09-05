@@ -54,7 +54,9 @@ class SelfAttention(BaseModule):
 
         if self.scale_qk_value is not None:
             self.scale_qk = Scale(self.scale_qk_value, shape=(self.num_heads, 1, 1), learnable=learnable_scale_qk, device=self.device, dtype=self.dtype)
-        self.use_scale = self.scale_qk_value is not None
+            self.use_scale = True
+        else:
+            self.use_scale = False
         self.reset_params()
     
     def reset_params(self):

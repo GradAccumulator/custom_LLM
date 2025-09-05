@@ -30,7 +30,9 @@ class Embedding(BaseModule):
     @property
     def device(self):
         return self.table.device
-    
+    @device.setter
+    def device(self, device):
+        pass
     def to(self, device=None, dtype=None):
         device, dtype = device_dtype_check(device, dtype)
         device = device or self.device

@@ -68,7 +68,7 @@ class CrossEntropyLoss(LossFunction):
         return loss
     
     def _apply_ignore_indices(self, loss:Tensor, label:Tensor):
-        if self.ignore_indices != []:
+        if self.ignore_indices.numel() > 0:
             label_not_ignore = ~torch.isin(label, self.ignore_indices)
             loss = loss * label_not_ignore.to(loss.dtype)
             loss = loss.sum()/label_not_ignore.sum()

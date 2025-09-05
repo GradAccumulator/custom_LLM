@@ -37,7 +37,7 @@ class BaseModule(object):
             if init_type == 'xavier':
                 p.mul_(math.sqrt(2/(d_in+d_out)))
             elif init_type == 'he':
-                p.mul_(math.sqrt(2/d_in))
+                p.mul_(math.sqrt(1/d_in))
             elif init_type == 'none':
                 pass
             else:

@@ -20,7 +20,7 @@ class Residual:
         res = Residual()
         res.value = self.value.detach().clone() if isinstance(self.value, Tensor) else self.value
         return res
-    def init_like():
+    def init_like(self):
         return Residual()
     
     def __repr__(self):

@@ -16,7 +16,7 @@ from src.utils.logging             import (TBoardManager, Logger)
 from src.training.trainer          import Trainer
 
 from src.modules.loss_functions    import CrossEntropyLoss
-from src.utils.dev_utils           import timer, parent_timer
+from src.utils.dev_utils           import (timer, parent_timer)
 from PATHES import PATHES
 
 load_checkpoint = True
@@ -38,14 +38,14 @@ if __name__ == '__main__':
             optimizer = Adam(
                 model.parameters_as_dict(), 
                 max_lr,
-                0.9, 0.98, 1e-2, 
+                0.9, 0.95, 1e-2, 
                 eps=1e-8, 
                 clip_grad=5,
                 device_transfer_while_conputing_mv=True,
-                loss_scale=0.1
+                loss_scale=0.7
             )
             
-            scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.effective_warmup_steps, decays.CosineDecay, scheduler_config.effective_total_steps, min_lr = max_lr*0.001)
+            scheduler = Scheduler(optimizer, warmups.LinearWarmup, scheduler_config.effective_warmup_steps, decays.CosineDecay, scheduler_config.effective_total_steps, min_lr = max_lr*1e-3)
         
         with timer("logger & tboard_manager 생성"):
             logger = Logger(logger_config.logs_dir)
@@ -56,7 +56,8 @@ if __name__ == '__main__':
                 logit_input=True, 
                 ignore_label_indices=[0],
                 weight_device='cuda',
-                loss_scale=1/optimizer.recip_loss_scale
+                loss_scale=1/optimizer.recip_loss_scale,
+                stability_scale=0.1
             )
             
             trainer_config = TrainerConfig(
@@ -73,9 +74,9 @@ if __name__ == '__main__':
                 grad_accumulation=scheduler_config.grad_accumulation,
                 tboard_manager=tboard_manager,
                 scheduler=scheduler,
-                validation=True,
-                validation_interval=32,
-                tboard_update_interval=1,
+                validation=False,
+                validation_interval=30,
+                tboard_update_interval=100000,
                 log_interval=1
             )
             

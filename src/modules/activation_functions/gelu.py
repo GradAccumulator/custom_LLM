@@ -17,7 +17,8 @@ class GELU(ActivationFunction):
         return 0.5*x*(1+torch.erf(x/self.sqrt_2))
     
     def gelu_tanh(self, x:torch.Tensor):
-        return 0.5*x*(1+self.tanh(self.sqrt_2_over_pi*(x+0.044715*(x**3))))
+        tanh = (1+self.tanh(self.sqrt_2_over_pi*(x+0.044715*(x**3))))
+        return 0.5*x*tanh
     
     def __call__(self, x:torch.Tensor):
         return self.forward(x)

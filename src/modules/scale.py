@@ -12,7 +12,9 @@ class Scale(BaseModule):
         if isinstance(value, ListLike):
             self.scale = torch.tensor(value, device=self.device, dtype=self.dtype, requires_grad=self.learnable)
         elif self.shape is not None:
-            self.scale = torch.full(self.shape, value, device=self.device, dtype=self.dtype, requires_grad=self.learnable)
+            self.scale = torch.rand(self.shape, device=self.device, dtype=self.dtype, requires_grad=self.learnable)
+            with torch.no_grad():
+                self.scale.mul_(0.1).add_(value-0.05)
         else:
             self.scale = torch.tensor(value, device=self.device, dtype=self.dtype, requires_grad=self.learnable)
         if self.learnable:

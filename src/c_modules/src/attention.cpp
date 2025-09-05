@@ -6,15 +6,17 @@
 using namespace std;
 
 #define X 0
-#define QKVWEIGHT 1
-#define OUTPUTWEIGHT 2
-#define SCALEQK 3
+#define QKV_WEIGHT 1
+#define OUTPUT_WEIGHT 2
+#define SCALE_QK 3
 #define Q_idx 4
 #define K_idx 5
 #define V_idx 6
 #define WEIGHT 7
 #define HEADS 8
-#define ATTENMASK 9
+#define DROPOUT_MASK 9
+#define Q_RAW 10
+#define K_RAW 11
 
 class CausalMaskedSelfAttention : public torch::autograd::Function<CausalMaskedSelfAttention> {
 private:
@@ -35,7 +37,7 @@ private:
 		auto QKV_splited = QKV_reshaped.split(d_head, -1);
 		if (scale_qk.numel() > 0) {
 			auto temp = scale_qk;
-			return {QKV_splited[0]*temp, QKV_splited[1]*temp, QKV_splited[2]};
+			return {QKV_splited[0]*temp, QKV_splited[1]*temp, QKV_splited[2], QKV_splited[0], QKV_splited[1]};
 		}
 		return QKV_splited;
 	}
@@ -90,8 +92,8 @@ private:
 		auto weight = softmax(scores, -1);
 		auto droput_out = dropout(weight, p_drop);
 		auto mask = droput_out[1];
-		weight = droput_out[0];
-		auto heads = weight.matmul(V);
+		auto weight_drop = droput_out[0];
+		auto heads = weight_drop.matmul(V);
 		//(B, Nheads, seq_len, d_head)
 		auto concated_heads = heads.transpose(1, 2).reshape({ heads.size(0), heads.size(2), num_heads * d_head });
 		auto out = concated_heads.matmul(output_weight);
@@ -133,6 +135,16 @@ public:
 		auto Q = QKV[0];
 		auto K = QKV[1];
 		auto V = QKV[2];
+		torch::Tensor Q_raw;
+		torch::Tensor K_raw;
+		if(scale_qk.numel() > 0) {
+			Q_raw = QKV[3];
+			K_raw = QKV[4];
+		}
+		else {
+			Q_raw = torch::Tensor();
+			K_raw = torch::Tensor();
+		}
 
 		auto atten_out = attention(
 			ctx, 
@@ -152,6 +164,7 @@ public:
 			atten_out[1], //weight (atten_weight)
 			atten_out[2], //heads
 			atten_out[3], //mask
+			Q_raw, K_raw
 		});
 		return atten_out[0]; // attention output
 	}
@@ -188,9 +201,9 @@ public:
 			: torch::Tensor();
 		
 		debug << 3 << endl;
-		int d_model = saved[OUTPUTWEIGHT].size(1);
-		//head_i.shape == (B, num_heads, seq_len, d_head)
-		auto concated_heads = saved[HEADS].transpose(1, 2).reshape({ batch * seq_len, d_model });
+		int d_model = saved[OUTPUT_WEIGHT].size(1);
+		//heads.shape == (B, num_heads, seq_len, d_head)
+		auto concated_heads = saved[HEADS].transpose(1, 2).reshape({ batch * seq_len, num_heads*d_head });
 		auto concated_grad_out = grad_out.reshape({ batch * seq_len, d_model });
 		//output_i = head_i@Wo_i
 		//  ���̺�--> dO_i/dHead_i = grad_out@Wo_i.T
@@ -201,7 +214,7 @@ public:
 		//grad_out.shape == (B, seq_len, d_model)
 		debug << 4 << endl;
 		auto dO_dWo = concated_heads.t().matmul(concated_grad_out);
-		auto dO_dHead = grad_out.matmul(saved[OUTPUTWEIGHT].t());
+		auto dO_dHead = grad_out.matmul(saved[OUTPUT_WEIGHT].t());
 		auto dOi_dHeadi = dO_dHead.reshape({ batch, seq_len, num_heads, d_head })
 			.transpose(1, 2);
 
@@ -210,11 +223,18 @@ public:
 		//weight_i.shape			      == (B, num_heads, seq_len, seq_len)
 		//V_i.shape						  == (B, num_heads, seq_len, d_head)
 		debug << 5 << endl;
-		auto dO_dV = saved[WEIGHT].transpose(2, 3).matmul(dOi_dHeadi)
-			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
+		torch::Tensor dO_dV;
+		if (saved[DROPOUT_MASK].defined()) {
+			dO_dV = (saved[WEIGHT]*saved[DROPOUT_MASK]).transpose(2, 3).matmul(dOi_dHeadi)
+				.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
+		}
+		else {
+			dO_dV = (saved[WEIGHT]).transpose(2, 3).matmul(dOi_dHeadi)
+				.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
+		}
 		auto dOi_dWeighti = dOi_dHeadi.matmul(saved[V_idx].transpose(2, 3));
-		if(saved[ATTENMASK].defined()){
-			dOi_dWeighti *= saved[ATTENMASK];
+		if(saved[DROPOUT_MASK].defined()){
+			dOi_dWeighti *= saved[DROPOUT_MASK];
 		}
 
 		//Bqkv �̺п� �ټ� �̸� �Ҵ�
@@ -244,9 +264,7 @@ public:
 		}
 
 		debug << 6 << endl;
-		
-		
-		auto dO_dWqkv = torch::empty_like(saved[QKVWEIGHT]);
+		auto dO_dWqkv = torch::empty_like(saved[QKV_WEIGHT]);
 		
 		auto dO_dWqkv_splited = dO_dWqkv.split(num_heads * d_head, -1);
 		
@@ -270,7 +288,10 @@ public:
 		//weight_i.shape == (B, num_heads, seq_len, seq_len)
 		//temp = dO_i/dScores_i
 		temp = saved[WEIGHT] * dOi_dWeighti;
-		temp -= saved[WEIGHT] * temp.sum(2, true);
+		if (saved[DROPOUT_MASK].defined()) {
+			dOi_dWeighti *= saved[DROPOUT_MASK];
+		}
+		temp -= saved[WEIGHT] * temp.sum(-1, true);
 
 		// scores    = QK.T
 		// Q.shape == (B, num_heads,  seq_len, d_head)
@@ -281,7 +302,7 @@ public:
 		auto dO_dQ = temp.matmul(saved[K_idx])
 			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head })
 			/ root_d_k;
-		auto dO_dK = saved[Q_idx].transpose(2,3).matmul(temp)
+		auto dO_dK = temp.transpose(2,3).matmul(saved[Q_idx])
 			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head })
 			/ root_d_k;
 
@@ -289,27 +310,33 @@ public:
 		//K = K*scale_qk
 		//scale_qk.shape == (num_heads, 1, 1)
 		//			or (1,1,1)
+		//Q/K.shape == (B, num_heads, seq_len, d_head)
 		debug << 9 << endl;
-		const auto& scale_qk = saved[SCALEQK];
 		torch::Tensor dO_dSqk;
-		dO_dQ = dO_dQ;
-		dO_dK = dO_dK;
-		if (scale_qk.numel()>0 && scale_qk.requires_grad()) {
-			if (scale_qk.sizes() == c10::IntArrayRef({ num_heads, 1, 1 })) {
-				dO_dSqk = dO_dK.reshape({batch, seq_len, num_heads, d_head}).transpose(2,3)
-						.sum({0, 1, 2})
-					+ dO_dQ.reshape({ batch, seq_len, num_heads, d_head }).transpose(2,3)
-						.sum({ 0,1,2 });
+		if (saved[SCALE_QK].numel()>0) {
+			dO_dK = dO_dK.reshape({batch, seq_len, num_heads, d_head}).transpose(1, 2);
+			dO_dQ = dO_dQ.reshape({batch, seq_len, num_heads, d_head}).transpose(1, 2);
+			if(saved[SCALE_QK].requires_grad()) {
+				if (saved[SCALE_QK].sizes() == c10::IntArrayRef({ num_heads, 1, 1 })) {
+					dO_dSqk = (dO_dK * saved[K_RAW] + dO_dQ * saved[Q_RAW]).sum({0, 2, 3});
+				}
+				else {
+					dO_dSqk = (dO_dK * saved[K_RAW] + dO_dQ * saved[Q_RAW]).sum();
+				}
+				dO_dSqk = dO_dSqk.reshape_as(saved[SCALE_QK]);
 			}
 			else {
-				dO_dSqk = dO_dK.sum() + dO_dQ.sum();
+				dO_dSqk = torch::Tensor();
 			}
-			dO_dSqk = dO_dSqk.reshape_as(scale_qk);
+			dO_dK *= saved[SCALE_QK];
+			dO_dQ *= saved[SCALE_QK];
+			dO_dK = dO_dK.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
+			dO_dQ = dO_dQ.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
 		}
 		else {
 			dO_dSqk = torch::Tensor();
 		}
-
+		
 		if (use_bias) {
 			dO_dBq.copy_(dO_dQ.sum(0));
 			dO_dBk.copy_(dO_dK.sum(0));
@@ -328,11 +355,11 @@ public:
 		//dO/d(Q/K).shape == (batch*seq_len, num_heads*d_head)
 		//x.shape		  == (B, seq_len, d_model)
 		debug << 11 << endl;
-		auto dO_dx = dO_dQ.matmul(saved[QKVWEIGHT].slice(-1, 0, num_heads * d_head).t())
+		auto dO_dx = dO_dQ.matmul(saved[QKV_WEIGHT].slice(-1, 0, num_heads * d_head).t())
 				.reshape({ batch, seq_len, d_model })
-			+ dO_dK.matmul(saved[QKVWEIGHT].slice(-1, num_heads * d_head, num_heads * d_head * 2).t())
+			+ dO_dK.matmul(saved[QKV_WEIGHT].slice(-1, num_heads * d_head, num_heads * d_head * 2).t())
 				.reshape({ batch, seq_len, d_model })
-			+ dO_dV.matmul(saved[QKVWEIGHT].slice(-1, num_heads * d_head * 2, num_heads * d_head * 3).t())
+			+ dO_dV.matmul(saved[QKV_WEIGHT].slice(-1, num_heads * d_head * 2, num_heads * d_head * 3).t())
 				.reshape({ batch, seq_len, d_model });
 
 		/*static torch::Tensor forward(

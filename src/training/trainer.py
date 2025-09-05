@@ -54,11 +54,19 @@ class Trainer:
         avg_loss = 0.0
         clear_memory()
         self.model.eval()
+        # start = torch.cuda.Event(enable_timing=True)
+        # end = torch.cuda.Event(enable_timing=True)
+        # start.record()
         with torch.no_grad():
             for (val_x, val_label) in self.val_loader:
                 logits = self.model(val_x)
                 size_rate = self.val_loader.current_size_rate()
                 avg_loss += self.loss_fn(logits,val_label).item()*size_rate
+                
+                # end.record()
+                # torch.cuda.synchronize()
+                # print(f"step time: {start.elapsed_time(end)/1000:.3f}s")
+                # start.record()
         avg_loss *= self.loss_fn.recip_loss_scale
         clear_memory()
         self.model.train()
@@ -209,6 +217,9 @@ class Trainer:
         self.avg_loss_in_accum = 0
         self.total_acc_in_accum = 0
         self.debug_fn = lambda:None
+        # start = torch.cuda.Event(enable_timing=True)
+        # end = torch.cuda.Event(enable_timing=True)
+        # start.record()
         for (train_x, train_label) in self.train_loader:
             self.current_step+=1
             
@@ -236,6 +247,10 @@ class Trainer:
             if debug_out in [self.STOP, self.EXIT]:
                 return debug_out
             val_loss = debug_out
+            # end.record()
+            # torch.cuda.synchronize()
+            # print(f"step time: {start.elapsed_time(end)/1000:.3f}s")
+            # start.record()
         return False
     def train(self):
         try:

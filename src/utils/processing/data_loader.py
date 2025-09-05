@@ -26,6 +26,7 @@ class DataLoader:
             raise StopIteration
         
         self._idx+=1
+        
         return (
             self.inputs[self._idx-1].to(self.device, dtype=torch.int64), 
             self.labels[self._idx-1].to(self.device, dtype=torch.int64),

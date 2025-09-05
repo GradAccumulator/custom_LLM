@@ -24,7 +24,7 @@ class Adam(BaseOptimizer):
 
     def __init__(self, parameters:dict, lr:float, beta1:float, beta2:float, weight_decay:float=0,*, eps=1e-8, clip_grad:float|bool=True, skip_init = False, lr_scale:dict=None, device_transfer_while_conputing_mv = False, loss_scale=1.0):
         '''
-        device_transfer_while_conputing_mv: If True, m and v are transferred to the parameters' device only during their computation. please set True when grad_accumulation is large
+        device_transfer_while_conputing_mv: True일때는 Adam.step()을 호출 한 뒤에 m,v를 수정할 때만 gpu로 옮겨서 작업하고, 이후 다시 CPU로 옮겨놓음. grad accumulation을 큰 값으로 사용할 때 사용
         '''
         super().__init__(parameters=parameters, lr=lr,weight_decay=weight_decay, lr_scale=lr_scale, clip_grad=clip_grad, loss_scale=loss_scale)
         self.b1 = beta1
