@@ -38,7 +38,7 @@ class Adam(BaseOptimizer):
             self.m = {key: torch.zeros_like(parameters[key], requires_grad=False) for key in parameters.keys()}
             self.v = {key: torch.zeros_like(parameters[key], requires_grad=False) for key in parameters.keys()}
             
-    def update_mv(self) -> dict[str, torch.Tensor]:
+    def update_mv(self, **kwargs) -> dict[str, torch.Tensor]:
         self.t += 1
         params = self.parameters_as_dict()
         try:
@@ -58,13 +58,13 @@ class Adam(BaseOptimizer):
             raise e
         return adam_updated
 
-    def step_with_wd(self):
+    def step_with_wd(self, grad_accum=1, **kwargs):
         with torch.no_grad():
-            super().step_with_wd(self.update_mv)
+            super().step_with_wd(self.update_mv, grad_accum=grad_accum, **kwargs)
 
-    def step_with_none(self):
+    def step_with_none(self, grad_accum=1, **kwargs):
         with torch.no_grad():
-            super().step_with_none(self.update_mv)
+            super().step_with_none(self.update_mv, grad_accum=grad_accum, **kwargs)
 
     def parameters_append(self, **kargs):
         super().parameters_append(**kargs)

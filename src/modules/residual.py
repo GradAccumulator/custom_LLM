@@ -9,6 +9,8 @@ class Residual:
     def sum_wrapper(self, value):
         saved = self.value
         self.value = None
+        if isinstance(saved, Tensor):
+            return saved.to(value.dtype) + value
         return saved + value
 
     def save(self):

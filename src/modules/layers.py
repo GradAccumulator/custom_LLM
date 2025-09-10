@@ -30,12 +30,12 @@ class LayerWrapper(dict):
 
 class Layers(BaseModule):
     @overload
-    def __init__(self, modules:dict[str, Any], num_layers, device='cpu', dtype=torch.float32):...
+    def __init__(self, modules:dict[str, Any], num_layers, device='cpu', dtype=torch.float32, save_inputs=False):...
     @overload
-    def __init__(self, *modules, num_layers, device='cpu', dtype=torch.float32):...
+    def __init__(self, *modules, num_layers, device='cpu', dtype=torch.float32, save_inputs=False):...
     @overload
-    def __init__(self, *, num_layers, device='cpu', dtype=torch.float32, **modules):...
-    def __init__(self, *modules_list, num_layers, device='cpu', dtype=torch.float32, **modules_dict):
+    def __init__(self, *, num_layers, device='cpu', dtype=torch.float32, save_inputs=False, **modules):...
+    def __init__(self, *modules_list, num_layers, device='cpu', dtype=torch.float32, save_inputs=False, **modules_dict):
         if modules_dict and modules_list:
             raise ValueError('modules_dict와 modules_list를 동시에 전달할 수 없습니다.')
         elif not modules_dict and not modules_list:
@@ -61,6 +61,9 @@ class Layers(BaseModule):
         self.num_layers = num_layers
         self.layers = [{} for _ in range(self.num_layers)]
         self._set_layers(modules)
+        self.save_inputs = save_inputs
+        if self.save_inputs:
+            self.inputs = {}
 
     def _set_layers(self, modules:dict):
         layer = {}
@@ -79,6 +82,7 @@ class Layers(BaseModule):
         try:
             for layer in self.layers:
                 for key,module in layer.items():
+                    #self.inputs[key] = x
                     x = module(x)
             return x
         except Exception as e:
@@ -146,8 +150,8 @@ class Layers(BaseModule):
     
     def init_like(self):
         if self.is_dict:
-            return Layers(self.modules, num_layers=self.num_layers, device=self.device, dtype=self.dtype)
-        return Layers(*list(self.modules.values()), num_layers=self.num_layers, device=self.device, dtype=self.dtype)
+            return Layers(self.modules, num_layers=self.num_layers, device=self.device, dtype=self.dtype, save_inputs=self.save_inputs)
+        return Layers(*list(self.modules.values()), num_layers=self.num_layers, device=self.device, dtype=self.dtype, save_inputs=self.save_inputs)
     
     def clone(self):
         new = self.init_like()
@@ -179,6 +183,7 @@ class Layers(BaseModule):
             f'        device={self.device},\n'
             f'        dtype={self.dtype},\n'
             f'        num_layers={self.num_layers},\n'
+            f'        save_inputs={self.save_inputs},\n'
             '        <<<modules>>>\n        '
             +'\n        '.join([f'[{i}]: {module}' for i,module in self.modules.items()])
             +'\n    )'

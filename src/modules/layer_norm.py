@@ -3,7 +3,7 @@ from .base_module import BaseModule
 from src.utils.torch_utils import device_dtype_check
 
 class LayerNorm(BaseModule):
-    def __init__(self, dim,*,eps=1e-5, device='cpu', dtype=torch.float32):
+    def __init__(self, dim,*,eps=5e-5, device='cpu', dtype=torch.float32):
         super().__init__(device=device, dtype=dtype)
         self.eps = eps
         self.dim = dim

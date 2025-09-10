@@ -49,6 +49,17 @@ def write(s:str, base_dir, *dir_and_file_names, encoding='utf-8', binary=False, 
 def append(s:str, base_dir, *dir_and_file_names, encoding='utf-8', binary=False, plus=False):
     with appending(base_dir, *dir_and_file_names, encoding=encoding, binary=binary, plus=plus) as f:
         f.write(s)
+        
+
+def alert():
+    import pygame
+    from time import sleep
+    pygame.mixer.init()
+    pygame.mixer.music.load("C:\\Users\\GIGABYTE\\Downloads\\99412B355CF6B93806.mp3")
+    for _ in range(3):
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            sleep(0.1)
 
 @contextmanager
 def writing(base_dir, *dir_and_file_names, encoding='utf-8', binary=False, plus=False):

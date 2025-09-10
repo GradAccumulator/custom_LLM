@@ -1,5 +1,7 @@
 import torch
-from typing import Callable
+from typing import (Callable, Any, ParamSpecKwargs)
+import src.c_modules as _C
+from src.utils.dev_utils import alert
 
 class BaseOptimizer:
     def __init__(self, parameters:dict[str, torch.tensor], lr:float, weight_decay:float=0, clip_grad:float|bool=True, lr_scale:dict={}, loss_scale:float=1):
@@ -15,18 +17,20 @@ class BaseOptimizer:
         self._cached_params_as_list = list(self._cached_params_as_dict.values())
         self.weight_decay = weight_decay
         self.recip_loss_scale = 1/loss_scale
-        if isinstance(clip_grad, float|int):
+        self.check_nan = True
+        if isinstance(clip_grad, bool):
+            if clip_grad:
+                self.max_grad_norm = 1
+                self.clip_grad = True
+                self.total_grad_norm = 0
+                self.prev_grad_norm = 0
+            else:
+                self.clip_grad = False
+        else:
             self.max_grad_norm = clip_grad
             self.clip_grad = True
             self.total_grad_norm = 0
             self.prev_grad_norm = 0
-        elif clip_grad:
-            self.max_grad_norm = 1
-            self.clip_grad = True
-            self.total_grad_norm = 0
-            self.prev_grad_norm = 0
-        else:
-            self.clip_grad = False
         
 
     def parameters_as_dict(self):
@@ -66,17 +70,29 @@ class BaseOptimizer:
                     'weight' not in key and key in self._ld.keys()}
             }
     
-    def clip_grad_norm(self):
-        with torch.no_grad():
-            if self.clip_grad:
-                return torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=self.max_grad_norm/self.recip_loss_scale)*self.recip_loss_scale
-        return None
+    def clip_grad_norm(self, grad_accum=1):
+        if self.clip_grad:
+            with torch.no_grad():
+                if _C.grad_nan_check(self.parameters()):
+                    print("grad is nan!!!")
+                    alert()
+                    params = self.parameters_as_dict()
+                    for k,p in params.items():
+                        if p.grad.isnan().any():
+                            print(k)
+                    breakpoint()
+                return torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=self.max_grad_norm/self.recip_loss_scale*grad_accum)*self.recip_loss_scale/grad_accum
+        return torch.tensor(False)
 
-    def step_with_wd(self, compute_grad_fn:Callable[[],dict[str,torch.Tensor]]):
+    def step_with_wd(self, compute_grad_fn:Callable[[Any],dict[str,torch.Tensor]], grad_accum=1, **kwargs):
         with torch.no_grad():
+            self.prev_grad_norm = self.clip_grad_norm(grad_accum)
             if self.clip_grad:
-                self.prev_grad_norm = self.clip_grad_norm()
-            gradients = compute_grad_fn()
+                if isinstance(self.prev_grad_norm, torch.Tensor) and self.prev_grad_norm.isnan():
+                    print("grad norm is nan!!!")
+                    alert()
+                    breakpoint()
+            gradients = compute_grad_fn(**kwargs)
             try:
                 for k, p in self._params['weight_decay'].items():
                     p.sub_(self.lr * (gradients[k]  + self._wd*p))
@@ -90,11 +106,10 @@ class BaseOptimizer:
                 print(f'error in optimizer step_with_wd in {k}')
                 breakpoint()
                 raise e
-    def step_with_none(self, compute_grad_fn:Callable[[],dict[str,torch.Tensor]]):
+    def step_with_none(self, compute_grad_fn:Callable[[],dict[str,torch.Tensor]], grad_accum=1, **kwargs):
         with torch.no_grad():
-            if self.clip_grad:
-                self.prev_grad_norm = self.clip_grad_norm()
-            gradients = compute_grad_fn()
+            self.prev_grad_norm = self.clip_grad_norm(grad_accum)
+            gradients = compute_grad_fn(**kwargs)
             for k,p in [item for item in self._params.items() if item[0] != 'lr_scale']:
                 p.sub_(self.lr  * gradients[k])
             for k,(p,ld) in self._params['lr_scale'].items():

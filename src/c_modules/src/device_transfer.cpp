@@ -36,7 +36,7 @@ map<string, torch::Tensor> ComputeMV_Wrapper(
 		v[kv.first] *= b2;
 
 		m[kv.first] += (1-b1)*kv.second.grad();
-		v[kv.first]  += (1-b2) * kv.second.grad().pow(2);
+		v[kv.first] += (1-b2)*kv.second.grad().pow(2);
 
 		auto m_hat = m[kv.first] / (1 - pow(b1, t));
 		auto v_hat = v[kv.first] / (1 - pow(b2, t));

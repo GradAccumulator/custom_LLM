@@ -1,6 +1,6 @@
 import torch
 import msvcrt
-from src.utils.dev_utils import timer, print_log, get_option, get_valid_posnumber
+from src.utils.dev_utils import timer, print_log, get_option, get_valid_posnumber, alert
 from src.utils.processing.data_processing import clear_memory
 import bdb
 import torchmetrics
@@ -45,7 +45,7 @@ class Trainer:
             f'warmup_steps(effective):{self.config.warmup_steps}\n'
             f'total_steps(effective):{self.config.total_steps}\n'
             f'effective_steps_per_epoch:{self.effective_steps_per_epoch}\n'
-            f'max_grad_norm:{self.optimizer.max_grad_norm}\n'
+            f'max_grad_norm:{self.optimizer.max_grad_norm if hasattr(self.optimizer, "max_grad_norm") else None}\n'
             f'min_lr&max_lr:{self.scheduler.min_lr:.3g} to {self.scheduler.max_lr:.3g}\n'
             f'optimizer:{self.optimizer}\n'
         )
@@ -133,15 +133,6 @@ class Trainer:
                     ("perplexity/validation" , self.val_perp     , self.effective_step, True )
                 )
     
-    def alert(self):
-        import pygame
-        from time import sleep
-        pygame.mixer.init()
-        pygame.mixer.music.load("C:\\Users\\GIGABYTE\\Downloads\\99412B355CF6B93806.mp3")
-        for _ in range(3):
-            pygame.mixer.music.play()
-            while pygame.mixer.music.get_busy():
-                sleep(0.1)
     
     def check_nan_and_inf(self, tensor:torch.Tensor, name):
         
@@ -149,7 +140,7 @@ class Trainer:
             error_msg = f"[Trainer] {name} is nan!!!!!"
             print(error_msg)
             self.logger.write(error_msg)
-            self.alert()
+            alert()
             option = get_option('debuging? or exit? or clipping?', ['d', 'e', 'c'])
             if option == 'd':
                 breakpoint()
@@ -163,7 +154,7 @@ class Trainer:
         
         elif tensor.isinf().any():
             print(f"[Trainer] {name} is inf!!!!!")
-            self.alert()
+            alert()
             option = get_option('debuging? or exit? or clipping?', ['d', 'e', 'c'])
             if option == 'd':
                 breakpoint()
@@ -179,6 +170,7 @@ class Trainer:
         self.optimizer.step()
         if self.scheduler:
             self.scheduler.step()
+
         if self.effective_step%self.config.log_interval==0:
             self.train_perp = torch.e**self.avg_loss_in_accum
             log = (
@@ -217,9 +209,9 @@ class Trainer:
         self.avg_loss_in_accum = 0
         self.total_acc_in_accum = 0
         self.debug_fn = lambda:None
-        # start = torch.cuda.Event(enable_timing=True)
-        # end = torch.cuda.Event(enable_timing=True)
-        # start.record()
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        start.record()
         for (train_x, train_label) in self.train_loader:
             self.current_step+=1
             
@@ -227,13 +219,13 @@ class Trainer:
                 val_loss= self.validate()
             
             logits, loss = self.forward_and_compute_loss(train_x, train_label)
-            loss = loss.float()/self.grad_accumulation
+            loss = loss.float()
 
             #backprop
-            loss.backward()        
+            (loss/self.grad_accumulation).backward()        
             
             #record loss and acc
-            self.avg_loss_in_accum += loss.item()*self.loss_fn.recip_loss_scale
+            self.avg_loss_in_accum += loss.item()*self.loss_fn.recip_loss_scale/self.grad_accumulation
             
             #tboard log
             self.tboard_update_loss(self.avg_loss_in_accum, val_loss, logits, train_label, self.total_acc_in_accum)
@@ -247,10 +239,11 @@ class Trainer:
             if debug_out in [self.STOP, self.EXIT]:
                 return debug_out
             val_loss = debug_out
-            # end.record()
-            # torch.cuda.synchronize()
-            # print(f"step time: {start.elapsed_time(end)/1000:.3f}s")
-            # start.record()
+            end.record()
+            torch.cuda.synchronize()
+            print(f"step time: {start.elapsed_time(end)/1000:.3f}s")
+            start.record()
+            self.train_loader._idx %= 10
         return False
     def train(self):
         try:

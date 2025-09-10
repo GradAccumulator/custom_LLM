@@ -2,8 +2,18 @@ import torch
 from .base_optimizer import BaseOptimizer
 
 class SGD(BaseOptimizer):
-    def __init__(self, parameters, lr, weight_decay = 0, momentum = 0, nesterov = False, dampening = 0, **lr_decay):
-        super().__init__(parameters, lr, weight_decay, lr_decay=lr_decay)
+    def __init__(
+        self, 
+        parameters:dict[str, torch.Tensor], 
+        lr:float, 
+        weight_decay:float = 0, 
+        momentum:float = 0, 
+        nesterov:bool = False, 
+        dampening:float = 0, 
+        clip_grad:float|bool=False,
+        **lr_scale
+    ):
+        super().__init__(parameters, lr, weight_decay, clip_grad, lr_scale=lr_scale)
         self._momentum = momentum
         self._nesterov = nesterov
         self._dampening = dampening
@@ -30,7 +40,7 @@ class SGD(BaseOptimizer):
     def momentum(self, momentum):
         self._momentum = momentum
         if self._momentum != 0:
-            self.v = {key: torch.zeros_like(params, requires_grad=False) for key, params in self.parameters.items()}
+            self.v = {key: torch.zeros_like(params, requires_grad=False) for key, params in self.parameters_as_dict().items()}
             if self.nesterov:
                 self.compute_gradients_fn = self.gradients_nesterov
             else:
@@ -69,34 +79,34 @@ class SGD(BaseOptimizer):
             else:
                 self.update_velocity = self.update_velocity_without_dampening
 
-    def update_velocity_with_dampening(self):
+    def update_velocity_with_dampening(self, grad_accum=1):
         for k,p, in self.parameters_as_dict().items():
-            self.v[k] = self._momentum*self.v[k] + self._dampening*p.grad
-    def update_velocity_without_dampening(self):
+            self.v[k] = self._momentum*self.v[k] + self._dampening*p.grad/grad_accum
+    def update_velocity_without_dampening(self, grad_accum=1):
         for k,p, in self.parameters_as_dict().items():
-            self.v[k] = self._momentum*self.v[k]+p.grad
+            self.v[k] = self._momentum*self.v[k]+p.grad/grad_accum
     
-    def gradients_nesterov(self) -> dict[str,torch.Tensor]:
+    def gradients_nesterov(self, grad_accum=1) -> dict[str,torch.Tensor]:
         with torch.no_grad():
             self.update_velocity()
             gradients ={}
             for k,p in self.parameters_as_dict().items():
-                gradients[k] = p.grad + self._momentum*self.v[k]
+                gradients[k] = p.grad/grad_accum + self._momentum*self.v[k]
         return gradients
     
-    def gradients_momentum(self)-> dict[str,torch.Tensor]:
+    def gradients_momentum(self, grad_accum=1, **kwargs)-> dict[str,torch.Tensor]:
         with torch.no_grad():
-            self.update_velocity()
+            self.update_velocity(grad_accum=grad_accum, **kwargs)
             return self.v
         
-    def gradients_SGD(self):
+    def gradients_SGD(self, grad_accum=1, **kwargs)-> dict[str,torch.Tensor]:
         return self.parameters_as_dict()
 
-    def step_with_wd(self):
-        super().step_with_wd(self.compute_gradients_fn)
+    def step_with_wd(self, grad_accum=1, **kwargs):
+        super().step_with_wd(self.compute_gradients_fn, grad_accum=grad_accum, **kwargs)
     
-    def step_with_none(self):
-        super().step_with_none(self.compute_gradients_fn)
+    def step_with_none(self, grad_accum=1, **kwargs):
+        super().step_with_none(self.compute_gradients_fn, grad_accum=grad_accum, **kwargs)
 
     def state_dict(self):
         state = super().state_dict()

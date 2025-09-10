@@ -4,24 +4,6 @@
 #include <math.h>
 #include <stdint.h>
 
-/*
-if seq_len != None:
-    stride = int(seq_len*stride_rate)
-    plus = []
-    for e in encoded:
-        if(len(e)>seq_len):
-            for i in range(0, len(e)-seq_len+1, stride):
-                plus.append(e[i:i+seq_len])
-        else:
-            plus.append(e)
-    encoded = plus
-    encoded_x = encoded
-    encoded_label = [x[1:] for x in encoded]
-12줄
-*/
-
-//약 82줄
-
 struct results {
     int16_t* arr_x;
     int16_t* arr_label;

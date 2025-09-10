@@ -38,6 +38,7 @@ class Sequential(BaseModule):
         super().__init__(device=device, dtype=dtype)
         self.layers = layers
         self._is_training = True
+        self.inputs = {}
 
         for k in self.layers.keys():
             if not isinstance(self.layers[k], To) and hasattr(self.layers[k], 'to'):
@@ -46,10 +47,11 @@ class Sequential(BaseModule):
     def forward(self, x):
         try:
             for key,layer in self.layers.items():
+                #if not isinstance(layer, To): self.inputs[key] = x
                 x = layer(x)
             return x
         except Exception as e:
-            print(f"error in layer {key}")
+            print(f"error in Sequential layer {key}")
             raise e
     
     def __call__(self, x):
@@ -87,7 +89,7 @@ class Sequential(BaseModule):
             for k in pop_list:
                 self._parameters.pop(k)
             for k,v in value._parameters.items():
-                self._parameters[f'layers[{idx}].{k}'] = v
+                self._parameters[f'Sequantial[{idx}].{k}'] = v
         self.layers[idx] = value
     def keys(self):
         return self.layers.keys()
