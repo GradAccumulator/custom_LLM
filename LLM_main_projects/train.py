@@ -50,7 +50,6 @@ if __name__ == '__main__':
                 decays.CosineDecay, scheduler_config.effective_total_steps, 
                 min_lr = max_lr*1e-3
             )
-            scheduler.total_steps = 2000
         
         with timer("logger & tboard_manager 생성"):
             logger = Logger(logger_config.logs_dir)
