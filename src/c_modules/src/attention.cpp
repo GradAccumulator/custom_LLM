@@ -42,10 +42,10 @@ private:
 		if (qkv_bias.numel() > 0)
 			QKV = QKV + qkv_bias;//qkv_bias.shape == (H*d_head*3)
 
-		//(B, L, H*d_head*3) -> (B, L, H, d_head*3)
-		auto QKV_reshaped = QKV.reshape({ x.sizes()[0], x.sizes()[1], num_heads, d_head *3}).transpose(1, 2);
-		//(B, H, L, d_head*3)	-> (B, H, L, d_head)x3
-		auto QKV_splited = QKV_reshaped.split(d_head, -1);
+		auto QKV_splited = QKV.split(num_heads*d_head, -1);
+		auto Q = QKV_splited[0].reshape({x.sizes()[0], x.sizes()[1], num_heads, d_head}).transpose(1, 2);
+		auto K = QKV_splited[1].reshape({x.sizes()[0], x.sizes()[1], num_heads, d_head}).transpose(1, 2);
+		auto V = QKV_splited[2].reshape({x.sizes()[0], x.sizes()[1], num_heads, d_head}).transpose(1, 2);
 
 		//qk_std를 사용할 때에만 실행
 		if (qk_std_exp.numel() > 0) {
@@ -60,8 +60,8 @@ private:
 			//Q_h와 K_h의 표준편차를 구함
 			//Q/K.shape == (B, H, L, d_head)
 			//std over L,d_head
-			auto std_Q = QKV_splited[0].std(c10::OptionalIntArrayRef({2, 3}), /*unbiased=*/false, /*keepdim=*/true);
-			auto std_K = QKV_splited[1].std(c10::OptionalIntArrayRef({2, 3}), /*unbiased=*/false, /*keepdim=*/true);
+			auto std_Q = Q.std(c10::OptionalIntArrayRef({2, 3}), /*unbiased=*/false, /*keepdim=*/true);
+			auto std_K = K.std(c10::OptionalIntArrayRef({2, 3}), /*unbiased=*/false, /*keepdim=*/true);
 			//-> std_Q/K.shape == (B, H, 1, 1)
 
 			//Q_h, K_h의 표준편차와 qk_std를 이용하여 Q_h와 K_h의 표준편차를 고정
@@ -74,15 +74,15 @@ private:
 
 			//backward에 필요한 중간값과 결과값을 반환
 			return {
-					QKV_splited[0]*Q_scale, QKV_splited[1]*K_scale, QKV_splited[2], 
-					QKV_splited[0], QKV_splited[1], 
+					Q*Q_scale, K*K_scale, V, 
+					Q, K, 
 					Q_scale, K_scale, qk_std,
 					std_is_not_clipped
 				};
 		}
 
 		//qk_std를 사용하지 않을 때에는 Q,K,V를 그대로 반환
-		return QKV_splited;
+		return {Q, K, V};
 	}
 
 	 //return {weight}
@@ -103,7 +103,7 @@ private:
 	) {
 		if (p_drop == 0.0f)return {x, torch::Tensor()};
 
-		auto mask = ((torch::rand({x.size(-1), x.size(-2)}, torch::TensorOptions().device(x.device()).dtype(torch::kHalf)) > p_drop)/(1-p_drop)).to(x.dtype());
+		auto mask = ((torch::rand({x.size(-2), x.size(-1)}, torch::TensorOptions().device(x.device()).dtype(torch::kHalf)) > p_drop)/(1-p_drop)).to(x.dtype());
 		return {x*mask, mask};
 	}
 
@@ -261,7 +261,8 @@ public:
 		debug << 1 << endl;
 		int d_model = saved[OUTPUT_WEIGHT].size(1);
 		//heads.shape == (B, num_heads, seq_len, d_head)
-		auto concated_heads = saved[HEADS].transpose(1, 2).reshape({ batch * seq_len, num_heads*d_head });
+		auto concated_heads = saved[HEADS].transpose(1, 2).reshape({batch,seq_len,num_heads*d_head})
+		.reshape({ batch * seq_len, num_heads * d_head });
 		auto concated_grad_out = grad_out.reshape({ batch * seq_len, d_model });
 		//output_i = head_i@Wo_i
 		//  ���̺�--> dO_i/dHead_i = grad_out@Wo_i.T
@@ -282,11 +283,11 @@ public:
 		torch::Tensor dO_dV;
 		if (saved[DROPOUT_MASK].defined()) {
 			dO_dV = (saved[WEIGHT]*saved[DROPOUT_MASK]).transpose(2, 3).matmul(dOi_dHeadi)
-				.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
+				.transpose(1, 2).reshape({ batch, seq_len, num_heads * d_head }).reshape({ batch * seq_len, num_heads * d_head });
 		}
 		else {
 			dO_dV = (saved[WEIGHT]).transpose(2, 3).matmul(dOi_dHeadi)
-				.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
+				.transpose(1, 2).reshape({ batch, seq_len, num_heads * d_head }).reshape({ batch * seq_len, num_heads * d_head });
 		}
 		auto dOi_dWeighti = dOi_dHeadi.matmul(saved[V_IDX].transpose(2, 3));
 		if(saved[DROPOUT_MASK].defined()){
@@ -307,7 +308,7 @@ public:
 				torch::TensorOptions().device(dO_dV.device())
 						.dtype(dO_dV.dtype())
 			);
-			temp_list = dO_dBqkv.split(num_heads * d_head);
+			temp_list = dO_dBqkv.split(num_heads * d_head, 0);
 
 			dO_dBq = temp_list[0];
 			dO_dBk = temp_list[1];
@@ -345,10 +346,12 @@ public:
 		//dO_i/dScores_i.shape == (B, num_heads, seq_len, seq_len)
 		//Wqkv.shape				   == (d_model, num_heads*d_head*3)
 		auto dO_dQ = temp.matmul(saved[K_IDX])
-			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head })
+			.transpose(1, 2).contiguous().view({ batch,seq_len, num_heads * d_head })
+			.view({ batch * seq_len, num_heads * d_head })
 			/ root_d_k;
 		auto dO_dK = temp.transpose(2,3).matmul(saved[Q_IDX])
-			.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head })
+			.transpose(1, 2).contiguous().view({ batch,seq_len, num_heads * d_head })
+			.view({ batch * seq_len, num_heads * d_head })
 			/ root_d_k;
 
 		//Q = Q*qk_std_exp
@@ -365,8 +368,8 @@ public:
 			//-> (B, seq_len, num_heads, d_head)
 			//-> (B, num_heads, seq_len, d_head)
 			//dO_dK/Q_h 형태로 변환
-			dO_dK = dO_dK/*_raw*/.reshape({batch, seq_len, num_heads, d_head}).transpose(1, 2);
-			dO_dQ = dO_dQ/*_raw*/.reshape({batch, seq_len, num_heads, d_head}).transpose(1, 2);
+			dO_dK/*_raw*/ = dO_dK.reshape({batch, seq_len, num_heads, d_head}).transpose(1, 2);
+			dO_dQ/*_raw*/ = dO_dQ.reshape({batch, seq_len, num_heads, d_head}).transpose(1, 2);
 
 			//qk_std_exp(=a_h)가 learnable일 경우에만 실행
 			if(qk_std_exp_is_learnable){
@@ -402,8 +405,8 @@ public:
 			dO_dK *= saved[K_SCALE];
 
 			//기울기 계산 이후 dO_dQ/K_h 형태에서 dO_dQ/K로 변환
-			dO_dQ = dO_dQ.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
-			dO_dK = dO_dK.transpose(1, 2).reshape({ batch * seq_len, num_heads * d_head });
+			dO_dQ = dO_dQ.transpose(1, 2).contiguous().view({ batch * seq_len, num_heads * d_head });
+			dO_dK = dO_dK.transpose(1, 2).contiguous().view({ batch * seq_len, num_heads * d_head });
 		}
 		else {
 			//a_h를 사용하지 않을 때는 빈 텐서로 메꿈
@@ -413,6 +416,7 @@ public:
 		if (use_bias) {
 			dO_dBq.copy_(dO_dQ.sum(0));
 			dO_dBk.copy_(dO_dK.sum(0));
+			dO_dBv.copy_(dO_dV.sum(0));
 		}
 
 		debug << 5 << endl;
@@ -427,12 +431,12 @@ public:
 		//Wqkv.shape == (d_model, num_heads*d_head*3)
 		//dO/d(Q/K).shape == (batch*seq_len, num_heads*d_head)
 		//x.shape		  == (B, seq_len, d_model)
-		auto dO_dx = dO_dQ.matmul(saved[QKV_WEIGHT].slice(-1, 0, num_heads * d_head).t())
-				.reshape({ batch, seq_len, d_model })
-			+ dO_dK.matmul(saved[QKV_WEIGHT].slice(-1, num_heads * d_head, num_heads * d_head * 2).t())
-				.reshape({ batch, seq_len, d_model })
-			+ dO_dV.matmul(saved[QKV_WEIGHT].slice(-1, num_heads * d_head * 2, num_heads * d_head * 3).t())
-				.reshape({ batch, seq_len, d_model });
+		auto Wqkv = saved[QKV_WEIGHT].split(num_heads * d_head, -1);
+		auto Wq=Wqkv[0], Wk=Wqkv[1], Wv=Wqkv[2];
+
+		auto dO_dx =  dO_dQ.matmul(Wq.t()).reshape({ batch, seq_len, d_model })
+								+ dO_dK.matmul(Wk.t()).reshape({ batch, seq_len, d_model })
+								+ dO_dV.matmul(Wv.t()).reshape({ batch, seq_len, d_model });
 
 		/*static torch::Tensor forward(
 		torch::autograd::AutogradContext* ctx,

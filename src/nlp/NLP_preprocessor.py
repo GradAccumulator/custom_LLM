@@ -4,6 +4,7 @@ from winsound import Beep
 from src.utils.processing.data_processing import batchify
 import src.utils.dev_utils as dev_utils
 import src.utils.processing.data_processing as dp
+from os.path import join
 
 class NLP_Preprocessor:
     def __init__(self, model, config):
@@ -11,7 +12,7 @@ class NLP_Preprocessor:
         self.config = config
         self.load_preprocessed = config.load_preprocessed_dataset_file
         if self.load_preprocessed:
-            self.dataset_path = config.PREPROCESSED_DATASET_PATH
+            self.dataset_path = config.PREPROCESSED_DATASET_DIR
         else:
             self.dataset_path = config.RAW_DATA_PATH
         self.train_x = None
@@ -82,20 +83,16 @@ class NLP_Preprocessor:
                 self.val_x,self.val_label     = self._encode_and_pad(valset, self.config.goal_trainset_len*1.6)
 
             with dev_utils.timer("전처리된 데이터셋 저장"):
-                D = {
-                    "train_x":self.train_x,
-                    "train_label":self.train_label,
-                    "val_x":self.val_x,
-                    "val_label":self.val_label,
-                }
-                torch.save(D, self.config.PREPROCESSED_DATASET_PATH)
+                torch.save(self.train_x, join(self.config.PREPROCESSED_DATASET_DIR, "train_x.pth"))
+                torch.save(self.train_label, join(self.config.PREPROCESSED_DATASET_DIR, "train_label.pth"))
+                torch.save(self.val_x, join(self.config.PREPROCESSED_DATASET_DIR, "val_x.pth"))
+                torch.save(self.val_label, join(self.config.PREPROCESSED_DATASET_DIR, "val_label.pth"))
         else:
             with dev_utils.timer("전처리된 데이터셋 읽는 시간"):
-                D = torch.load(self.dataset_path)
-                self.train_x       = D['train_x']
-                self.train_label   = D['train_label']
-                self.val_x      = D['val_x']
-                self.val_label      = D['val_label']
+                self.train_x = torch.load(join(self.dataset_path, "train_x.pth"))
+                self.train_label = torch.load(join(self.dataset_path, "train_label.pth"))
+                self.val_x = torch.load(join(self.dataset_path, "val_x.pth"))
+                self.val_label = torch.load(join(self.dataset_path, "val_label.pth"))
         
         dp.check_and_raise(len(self.train_x)<self.config.goal_trainset_len, 
             f"[Preprocessor] 예상 trainset 길이와 실제 trainset 길이가 다릅니다. 예상:{self.config.goal_trainset_len}, 실제:{len(self.train_x)}")

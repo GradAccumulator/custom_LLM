@@ -137,7 +137,7 @@ class SelfAttention(BaseModule):
     def state_dict(self):
         return {
             'linear': self.linear_qkv.state_dict(),
-            's_goal_exp': self.qk_std_exp.state_dict() if hasattr(self, 's_goal_exp') and self.qk_std_exp.learnable else None,
+            'qk_std_exp': self.qk_std_exp.state_dict() if hasattr(self, 'qk_std_exp') and self.qk_std_exp.learnable else None,
             'W_o': self.linear_output.state_dict(),
         }
         
@@ -159,7 +159,7 @@ class SelfAttention(BaseModule):
             )
             if self.qk_std_exp.learnable:
                 s_goal_exp_repr += (
-                    f"    <<s_goal_exp>>\n"
+                    f"    <<qk_std_exp>>\n"
                     f'    {repr(self.qk_std_exp.scale.flatten())}\n'
                 )
         return (

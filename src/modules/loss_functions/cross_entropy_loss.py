@@ -10,8 +10,8 @@ class CrossEntropyLoss(LossFunction):
             dim                     =-1, 
             weight_device           ='cpu',
             stability_scale         =1.0,
-            weight:Path|PathLike|ListLike|dict=None, 
-            loss_scale              =1.0
+            loss_scale              =1.0,
+            weight:Path|PathLike|ListLike|dict=None,
         ):
         self.logit_input = logit_input
         self.ignore_indices = torch.tensor(ignore_label_indices, device=weight_device)
@@ -22,10 +22,8 @@ class CrossEntropyLoss(LossFunction):
             self.cross_entropy_loss = self._CE       
         self.weight = weight
         self.stability_scale = stability_scale
-        self.recip_stability_scale = 1.0/self.stability_scale
         self.device = weight_device
         self.loss_scale = loss_scale
-        self.recip_loss_scale = 1.0/loss_scale
         
     def to(self, device=None, dtype=None):
         _,dtype = device_dtype_check(device, dtype)
@@ -62,7 +60,7 @@ class CrossEntropyLoss(LossFunction):
             loss = loss*self.weight[label].to(loss.dtype)
         return loss
     
-    def _apply_scales(self, loss:Tensor):
+    def _apply_scale(self, loss:Tensor):
         if self.stability_scale != 1.0:
             loss = loss*self.stability_scale
         return loss
@@ -70,13 +68,14 @@ class CrossEntropyLoss(LossFunction):
     def _apply_ignore_indices(self, loss:Tensor, label:Tensor):
         if self.ignore_indices.numel() > 0:
             label_not_ignore = ~torch.isin(label, self.ignore_indices)
-            loss = loss * label_not_ignore.to(loss.dtype)
+            loss = loss * label_not_ignore.reshape_as(loss)
             loss = loss.sum()/label_not_ignore.sum()
         else:
             loss = loss.mean()
+        
         return loss
     
-    def _apply_unreduction_scale(self, loss:Tensor):
+    def _apply_unscale(self, loss:Tensor):
         if self.stability_scale != 1.0:
             loss = loss*self.recip_stability_scale
         return loss
@@ -91,11 +90,11 @@ class CrossEntropyLoss(LossFunction):
         
         loss = logs-gathered
         loss = self._apply_weight(loss, label)
-        loss = self._apply_scales(loss)
+        loss = self._apply_scale(loss)
         
         loss = self._apply_ignore_indices(loss, label)
         
-        return self._apply_unreduction_scale(loss)
+        return self._apply_unscale(loss)
     
     def _CE(self, probs:Tensor, label:Tensor):
         label = label.unsqueeze(self.dim)
@@ -104,16 +103,38 @@ class CrossEntropyLoss(LossFunction):
         loss = -gathered.log()
         
         loss = self._apply_weight(loss, label)
-        loss = self._apply_scales(loss)
+        loss = self._apply_scale(loss)
         loss = self._apply_ignore_indices(loss, label)
         
-        return self._apply_unreduction_scale(loss)
+        return self._apply_unscale(loss)
     
     def forward(self, pred, label):
         return self.cross_entropy_loss(pred, label)*self.loss_scale
 
     def __call__(self, pred, label):
         return self.forward(pred, label)
+    
+    @property
+    def stability_scale(self):
+        return self._stability_scale
+    @stability_scale.setter
+    def stability_scale(self, stability_scale):
+        self._stability_scale = stability_scale
+        self._recip_stability_scale = 1.0/stability_scale
+    @property
+    def recip_stability_scale(self):
+        return self._recip_stability_scale
+    
+    @property
+    def loss_scale(self):
+        return self._loss_scale
+    @loss_scale.setter
+    def loss_scale(self, loss_scale):
+        self._loss_scale = loss_scale
+        self._recip_loss_scale = 1.0/loss_scale
+    @property
+    def recip_loss_scale(self):
+        return self._recip_loss_scale
     
     @property
     def weight(self):
