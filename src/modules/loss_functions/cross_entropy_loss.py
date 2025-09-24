@@ -8,13 +8,13 @@ class CrossEntropyLoss(LossFunction):
             logit_input             =True, 
             ignore_label_indices    =[], 
             dim                     =-1, 
-            weight_device           ='cpu',
+            device           ='cpu',
             stability_scale         =1.0,
             loss_scale              =1.0,
             weight:Path|PathLike|ListLike|dict=None,
         ):
         self.logit_input = logit_input
-        self.ignore_indices = torch.tensor(ignore_label_indices, device=weight_device)
+        self.ignore_indices = torch.tensor(ignore_label_indices, device=device)
         self.dim = dim
         if logit_input:
             self.cross_entropy_loss = self._CE_softmax
@@ -22,14 +22,14 @@ class CrossEntropyLoss(LossFunction):
             self.cross_entropy_loss = self._CE       
         self.weight = weight
         self.stability_scale = stability_scale
-        self.device = weight_device
+        self.device = device
         self.loss_scale = loss_scale
         
     def to(self, device=None, dtype=None):
         _,dtype = device_dtype_check(device, dtype)
         if self.device==device or device is None:
             return self
-        new= CrossEntropyLoss(logit_input=self.logit_input, ignore_label_indices=self.ignore_indices, dim=self.dim, weight_device=self.device, stability_scale=self.stability_scale, weight=self.weight)
+        new= CrossEntropyLoss(logit_input=self.logit_input, ignore_label_indices=self.ignore_indices, dim=self.dim, device=self.device, stability_scale=self.stability_scale, weight=self.weight)
         return new
         
     def __repr__(self):
@@ -172,6 +172,6 @@ class CrossEntropyLoss(LossFunction):
             logit_input=True, 
             ignore_label_indices=state['ignore_values'], 
             weight=state['loss_weights'],
-            weight_device=state['device']
+            device=state['device']
         )
     

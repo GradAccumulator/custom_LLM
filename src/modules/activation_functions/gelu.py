@@ -4,7 +4,7 @@ from .tanh import Tanh
 from .activation_function import ActivationFunction
 
 class GELU(ActivationFunction):
-    def __init__(self, erf=True):
+    def __init__(self,erf=True):
         if erf:
             self.forward = self.gelu_erf
             self.sqrt_2 = math.sqrt(2)
@@ -14,6 +14,7 @@ class GELU(ActivationFunction):
             self.tanh = Tanh()
 
     def gelu_erf(self, x:torch.Tensor):
+        
         return 0.5*x*(1+torch.erf(x/self.sqrt_2))
     
     def gelu_tanh(self, x:torch.Tensor):

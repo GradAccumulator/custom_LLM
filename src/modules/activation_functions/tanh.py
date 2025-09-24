@@ -1,5 +1,6 @@
 import torch
 from .activation_function import ActivationFunction
+import src.c_modules as _C
 
 class Tanh(ActivationFunction):
     def __new__(cls):
@@ -9,7 +10,7 @@ class Tanh(ActivationFunction):
     def __init__(self):...
         
     def forward(self, x:torch.Tensor):
-        return (x.exp() - (-x).exp())/(x.exp() + (-x).exp())
+        return _C.tanh(x)
     
     def __call__(self, x:torch.Tensor):
         return self.forward(x)

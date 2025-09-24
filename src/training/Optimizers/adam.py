@@ -31,12 +31,12 @@ class Adam(BaseOptimizer):
         self.b2 = beta2
         self.eps = eps
         self.use_device_transfer = device_transfer_while_conputing_mv
-        self.device = self.parameters_as_dict()[list(self.parameters_as_dict().keys())[0]].device
         self.t = 0
+        self.device = next(iter(parameters.values())).device
         
         if not skip_init:
-            self.m = {key: torch.zeros_like(parameters[key], requires_grad=False) for key in parameters.keys()}
-            self.v = {key: torch.zeros_like(parameters[key], requires_grad=False) for key in parameters.keys()}
+            self.m = {key: torch.zeros_like(parameters[key], requires_grad=False, device = self.device if not self.use_device_transfer else 'cpu') for key in parameters.keys()}
+            self.v = {key: torch.zeros_like(parameters[key], requires_grad=False, device = self.device if not self.use_device_transfer else 'cpu') for key in parameters.keys()}
             
     def update_mv(self, **kwargs) -> dict[str, torch.Tensor]:
         self.t += 1
@@ -50,8 +50,7 @@ class Adam(BaseOptimizer):
                 self.b1,
                 self.b2,
                 self.eps,
-                self.use_device_transfer,
-                self.device
+                self.use_device_transfer
             )
         except Exception as e:
             print(f"error in adam update")
@@ -69,8 +68,8 @@ class Adam(BaseOptimizer):
     def parameters_append(self, **kargs):
         super().parameters_append(**kargs)
         for key in kargs.keys():
-            self.m[key] = torch.zeros_like(self._params[key], requires_grad=False)
-            self.v[key] = torch.zeros_like(self._params[key], requires_grad=False)
+            self.m[key] = torch.zeros_like(self._params[key], requires_grad=False, device=self.device if not self.use_device_transfer else 'cpu')
+            self.v[key] = torch.zeros_like(self._params[key], requires_grad=False, device=self.device if not self.use_device_transfer else 'cpu')
 
     def state_dict(self):
         m = {}

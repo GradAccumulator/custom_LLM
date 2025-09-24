@@ -5,7 +5,7 @@ import numpy as np
 import traceback
 #my packages
 import src.utils.dev_utils as dev_utils
-from PATHES import PATHES
+import PATHES
 from typing import overload
 
 process_bottleneck = ctypes.CDLL(dev_utils.join(PATHES.SRC_C_MODULES, 'dlls', "seq_windows.dll"))

@@ -52,7 +52,7 @@ class BaseOptimizer:
         parameters = self.parameters_as_dict()
         if wd == 0:
             self.step = self.step_with_none
-            self._params = {key:parameters[key] for key in parameters.keys() if key not in self._ld.keys()}
+            self._params['others'] = {key:parameters[key] for key in parameters.keys() if key not in self._ld.keys()}
             self._params.update({
                 "lr_scale":{
                     key:(parameters[key], self._ld[key]) 
@@ -73,65 +73,57 @@ class BaseOptimizer:
     def clip_grad_norm(self, grad_accum=1):
         if self.clip_grad:
             with torch.no_grad():
-                if _C.grad_nan_check(self.parameters()):
-                    print("grad is nan!!!")
-                    alert()
-                    params = self.parameters_as_dict()
-                    for k,p in params.items():
-                        if p.grad.isnan().any():
-                            print(k)
-                    breakpoint()
                 return torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=self.max_grad_norm/self.recip_loss_scale*grad_accum)*self.recip_loss_scale/grad_accum
         return torch.tensor(False)
 
     def step_with_wd(self, compute_grad_fn:Callable[[Any],dict[str,torch.Tensor]], grad_accum=1, **kwargs):
         with torch.no_grad():
             self.prev_grad_norm = self.clip_grad_norm(grad_accum)
-            if self.clip_grad:
-                if isinstance(self.prev_grad_norm, torch.Tensor) and self.prev_grad_norm.isnan():
-                    print("grad norm is nan!!!")
-                    alert()
-                    breakpoint()
             gradients = compute_grad_fn(**kwargs)
             try:
-                for k, p in self._params['weight_decay'].items():
-                    p.sub_(self.lr * (gradients[k]  + self._wd*p))
-                for k,p in self._params['others'].items():
-                    p.sub_(self.lr  * gradients[k])
-                for k,(p,ld) in self._params['ls_weight_decay'].items():
-                    p.sub_(self.lr * ld*( gradients[k] + self._wd*p))
-                for k,(p,ld) in self._params['ls_others'].items():
-                    p.sub_(self.lr  * ld*gradients[k])
+                _C.step_with_wd(
+                    self._params,
+                    gradients,
+                    self.lr,
+                    self.weight_decay
+                )
+                # for k, p in self._params['weight_decay'].items():
+                #     p.sub_(self.lr * (gradients[k]  + self._wd*p))
+                # for k,p in self._params['others'].items():
+                #     p.sub_(self.lr  * gradients[k])
+                # for k,(p,ld) in self._params['ls_weight_decay'].items():
+                #     p.sub_(self.lr * ld*( gradients[k] + self._wd*p))
+                # for k,(p,ld) in self._params['ls_others'].items():
+                #     p.sub_(self.lr  * ld*gradients[k])
             except Exception as e:
-                print(f'error in optimizer step_with_wd in {k}')
+                print(f'error in optimizer step_with_wd')
                 breakpoint()
                 raise e
     def step_with_none(self, compute_grad_fn:Callable[[],dict[str,torch.Tensor]], grad_accum=1, **kwargs):
         with torch.no_grad():
             self.prev_grad_norm = self.clip_grad_norm(grad_accum)
             gradients = compute_grad_fn(**kwargs)
-            for k,p in [item for item in self._params.items() if item[0] != 'lr_scale']:
-                p.sub_(self.lr  * gradients[k])
-            for k,(p,ld) in self._params['lr_scale'].items():
-                p.sub_(self.lr  * ld*gradients[k])
+            _C.step_with_none(
+                self._params,
+                gradients,
+                self.lr
+            )
                 
     def zero_grad(self):
         with torch.no_grad():
-            params = self.parameters_as_dict()
-            for p in params.values():
-                p.grad = None
+            _C.zero_grad(self.parameters())
 
-    def parameters_append(self, **kargs):
+    def parameters_append(self, **kwargs):
         if self._wd != 0:
-            for k,v in kargs.items():
+            for k,v in kwargs.items():
                 if "weight" in k:
                     self._params['weight_decay'][k] = v
                 else:
                     self._params['others'][k] = v
         else:
-            self._params.update(kargs)
-        self._cached_params_as_dict.update(kargs)
-        self._cached_params_as_list.extend(list(kargs.values()))
+            self._params.update(kwargs)
+        self._cached_params_as_dict.update(kwargs)
+        self._cached_params_as_list.extend(list(kwargs.values()))
 
     def state_dict(self):
         state = {

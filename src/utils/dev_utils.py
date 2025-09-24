@@ -26,9 +26,10 @@ def print_log(text:str, **kargs):
 def get_valid_posnumber(log:str, return_type:int|float):
     while True:
         out = input(log)
-        if out.isdecimal():
+        try:
             return return_type(out)
-        print("올바른 값을 입력하세요")
+        except:
+            print("올바른 값을 입력하세요")
 
 def ask_options(log:str, options:list[str]):
     '''options는 무조건 소문자로 해야함'''

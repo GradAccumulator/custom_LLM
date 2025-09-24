@@ -17,7 +17,7 @@ from src.training.trainer          import Trainer
 
 from src.modules.loss_functions    import CrossEntropyLoss
 from src.utils.dev_utils           import (timer, parent_timer)
-from PATHES import PATHES
+import PATHES
 
 load_checkpoint = False
 if __name__ == '__main__':
@@ -34,12 +34,12 @@ if __name__ == '__main__':
             val_loader = DataLoader(val_x, val_label, device='cuda')
         
         with timer("optimizer & scheduler 생성"):
-            max_lr =2.5e-4
+            max_lr = 1e-4
             optimizer = Adam(
                 model.parameters_as_dict(),
                 max_lr,
-                0.9, 0.95, 1e-2,
-                eps=1e-8,
+                0.9, 0.98, 1e-2,
+                eps=1e-10,
                 clip_grad=5,
                 device_transfer_while_conputing_mv=True,
             )
@@ -55,11 +55,11 @@ if __name__ == '__main__':
             logger = Logger(logger_config.logs_dir)
             tboard_manager = TBoardManager(tboard_manager_config.logs_dir, window_size=20)
         
-        with timer("loss 함수& trainer 생성"):
+        with timer("loss 함수 & trainer 생성"):
             loss_fn = CrossEntropyLoss(
                 logit_input=True, 
                 ignore_label_indices=[0],
-                weight_device='cuda',
+                device='cuda',
                 loss_scale=1/optimizer.recip_loss_scale,
             )
             

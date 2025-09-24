@@ -46,14 +46,14 @@ class TransformerII:
             embedding=Embedding(self.tokenizer.vocab_size, self.d_model),
             to=To(forward_type),
             pos_embedding=PositionalEmbedding(self.seq_len, self.d_model),
-            dropout=Dropout(self.p_dropout),
+            dropout=Dropout(p=self.p_dropout),
             transformer_layers=Layers(
                 res1_save=self.residual.save(),
                 LN1=LayerNorm(self.d_model, eps=self.LN_eps),
                 to1=To(torch.float32),
-                attention=SelfAttention(self.d_model, self.num_heads, seq_len=self.seq_len, qk_std_init=None, learnable_qk_std=True, dropout_p=self.p_dropout),
+                attention=SelfAttention(self.d_model, self.num_heads, seq_len=self.seq_len, qk_std_init=qk_std_init, learnable_qk_std=True, dropout_p=self.p_dropout),
                 to2=To(forward_type),
-                dropout1=Dropout(self.p_dropout),
+                dropout1=Dropout(p=self.p_dropout),
                 #scale_res_atten=Scale(self.scale_res_atten, learnable=True),
                 res1_sum=self.residual.sum(),
                 
@@ -62,7 +62,7 @@ class TransformerII:
                 FFN_in=Linear(self.d_model, self.d_ffn),
                 act_fn=self.act_fn,
                 FFN_out=Linear(self.d_ffn, self.d_model),
-                dropout=Dropout(self.p_dropout),
+                dropout=Dropout(p=self.p_dropout),
                 #scale_res_ffn=Scale(self.scale_res_ffn, learnable=True),
                 res2_sum=self.residual.sum(),
             num_layers=self.num_layers, save_inputs=False)
@@ -106,7 +106,7 @@ class TransformerII:
     
     def encode(self, x:list[str],*, is_dataset=False, max_length=10000) -> torch.Tensor:
         if not is_dataset:
-            return torch.from_numpy(self.tokenizer.encode(x, seq_len=self.seq_len, is_dataset=False, max_length=max_length), device=self.device)
+            return torch.from_numpy(self.tokenizer.encode(x, seq_len=self.seq_len, is_dataset=False, max_length=max_length)).to(self.device)
         input,label = self.tokenizer.encode(x, seq_len=self.seq_len, is_dataset=True, max_length=max_length)
         input = torch.from_numpy(input)
         label = torch.from_numpy(label)

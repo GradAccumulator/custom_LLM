@@ -119,9 +119,12 @@ class Layers(BaseModule):
         if idx>=len(self.layers):
             raise IndexError
         self.layers[idx][key] = module
-        if isinstance(module, BaseModule):
+        if isinstance(module, BaseModule): 
             for k,p in module._parameters.items():
-                self._parameters[f'layers[{idx}][{key}]({self.layers[idx][key].__class__.__name__}).{k}'] = p
+                key_  = f'layers[{idx}][{key}]({self.layers[idx][key].__class__.__name__}).{k}'
+                if key_  in self._parameters.keys():
+                    self._parameters.pop(key_ )
+                self._parameters[key_ ] = p
     def set_layer(self, idx:int, layer:dict[str,Any]):
         if idx>=len(self.layers):
             raise IndexError

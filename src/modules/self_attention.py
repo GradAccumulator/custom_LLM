@@ -8,6 +8,11 @@ from src.utils.torch_utils import device_dtype_check
 import src.c_modules as _C
 import math
 
+class IntRef(int):
+    def __init__(self, value):
+        self.value = value
+        self = value
+
 class SelfAttention(BaseModule):
     def __init__(
         self, 
@@ -42,8 +47,9 @@ class SelfAttention(BaseModule):
         self.use_dropout = dropout_p>0
         self.mask_dtype = mask_dtype
         self.eps = eps
+        self._is_inference = False
         if self.use_dropout:
-            self.dropout = Dropout(dropout_p)
+            self.dropout = Dropout(p=dropout_p)
         
         if self.seq_len is not None:
             self.cached_mask = torch.full((self.seq_len, self.seq_len), float('-inf'), device=self.device, dtype=mask_dtype).triu(diagonal=1)
@@ -55,14 +61,29 @@ class SelfAttention(BaseModule):
 
         if self.qk_std_init is not None:
             self.qk_std_exp = Scale(math.exp(self.qk_std_init)-1, shape=(self.num_heads, 1, 1), learnable=learnable_qk_std, device=self.device, dtype=self.dtype)
-            self.use_qk_std_tgt = True
+            self.use_qk_std = True
         else:
-            self.use_qk_std_tgt = False
+            self.use_qk_std = False
         self.reset_params()
+        self.train()
     
     def reset_params(self):
         self.linear_qkv = Linear(self.d_model, self.num_heads*self.d_head*3, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
         self.linear_output = Linear(self.num_heads*self.d_head, self.d_model, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
+    
+    def reset_cache(self):
+        self.k_cache = torch.empty((self.seq_len, self.num_heads, self.d_head), device=self.device, dtype=self.dtype)
+        self.v_cache = torch.empty((self.seq_len, self.num_heads, self.d_head), device=self.device, dtype=self.dtype)
+        self.cache_offset = IntRef(0)
+    @property
+    def is_training(self):
+        return not self._is_inference
+    @property
+    def mode(self):
+        return 'train' if self.is_training else 'inference'
+    @property
+    def is_inference(self):
+        return self._is_inference
     
     @property
     def use_bias(self):
@@ -82,9 +103,13 @@ class SelfAttention(BaseModule):
             self.dropout.p if self.use_dropout and self.dropout.is_training else 0.0,
             self.linear_qkv.bias if self.use_bias else None,
             self.linear_output.bias if self.use_bias else None,
-            self.qk_std_exp.scale if self.use_qk_std_tgt else None,
+            self.qk_std_exp.scale if self.use_qk_std else None,
             self.cached_mask if self.cached_mask is not None else None,
-            self.eps
+            self.eps,
+            self.k_cache,
+            self.v_cache,
+            self.is_inference,
+            self.cache_offset
         )
     
     def __call__(self, x):
@@ -105,9 +130,18 @@ class SelfAttention(BaseModule):
         return new
     
     def eval(self):
-        self.dropout.eval()
+        if self.use_dropout:
+            self.dropout.eval()
     def train(self):
-        self.dropout.train()
+        if self.use_dropout:
+            self.dropout.train()
+        self._is_inference = False
+        self.k_cache = None
+        self.v_cache = None
+        self.cache_offset = IntRef(0)
+    def inference(self):
+        self._is_inference = True
+        self.reset_cache()
     @property
     def mode(self):
         return self.dropout.mode
@@ -116,7 +150,7 @@ class SelfAttention(BaseModule):
         atten = self.init_like()
         atten.linear_qkv = self.linear_qkv.clone()
         atten.linear_output = self.linear_output.clone()
-        if self.use_qk_std_tgt:
+        if self.use_qk_std:
             atten.qk_std_exp = self.qk_std_exp.clone()
         return atten
     
@@ -162,7 +196,7 @@ class SelfAttention(BaseModule):
                     f"    <<qk_std_exp>>\n"
                     f'    {repr(self.qk_std_exp.scale.flatten())}\n'
                 )
-        return (
+        return super().__repr__((
             f'SelfAttention(\n'
             f'    d_model={self.d_model},\n'
             f'    num_heads={self.num_heads},\n'
@@ -175,4 +209,4 @@ class SelfAttention(BaseModule):
             +s_goal_exp_repr+
             f'    mask_dtype={self.mask_dtype}\n'
             f')'
-        )
+        ))

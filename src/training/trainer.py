@@ -149,7 +149,7 @@ class Trainer:
                 raise ValueError(error_msg)
             elif option == 'c':
                 tensor.nan_to_num_(0)
-                self.logger.write("LossClipped to {}".format(tensor))
+                self.logger.write(f"loss clipped to {0}")
                 return tensor
         
         elif tensor.isinf().any():
@@ -163,6 +163,8 @@ class Trainer:
             elif option == 'c':
                 num = get_valid_posnumber("input a number to clip: ", float)
                 tensor.clamp_(-num, num)
+            if get_option("do you want to use stability_scale?", ['y', 'n'])=='y':
+                num = get_valid_posnumber('input stability_scale value', float)
 
     def step_and_logging(self):
         self.effective_step += 1
@@ -204,7 +206,6 @@ class Trainer:
         return logits, loss
         
     def train_one_epoch(self):
-        self.model.train()
         val_loss = torch.nan
         self.avg_loss_in_accum = 0
         self.total_acc_in_accum = 0
@@ -271,6 +272,7 @@ class Trainer:
             raise
         except Exception as e:
             breakpoint()
+
             raise e
 
     def quit_training(self, save=True):

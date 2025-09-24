@@ -44,7 +44,7 @@ class Sequential(BaseModule):
             if not isinstance(self.layers[k], To) and hasattr(self.layers[k], 'to'):
                 self[k] = self.layers[k].to(device=self.device, dtype=self.dtype)
     
-    def forward(self, x):
+    def forward(self, x:torch.Tensor)->torch.Tensor:
         try:
             for key,layer in self.layers.items():
                 #if not isinstance(layer, To): self.inputs[key] = x
@@ -154,11 +154,11 @@ class Sequential(BaseModule):
         return self._is_training
     
     def __repr__(self):
-        return (
+        return super().__repr__((
             f'Sequential(\n'
             f'    device={self.device},\n'
             f'    dtype={self.dtype},\n'
             f'    <<layers>>\n    '
             +'\n    '.join([f'{i}: {module}' for i,module in self.layers.items()])
             +'\n)'
-        )
+        ))
