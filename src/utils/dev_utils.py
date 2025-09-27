@@ -12,10 +12,10 @@ class BoolWrapper:
     def __init__(self, value=False):
         self.flag = value
     
-    def true_(self):
+    def true(self):
         self.flag = True
     
-    def false_(self):
+    def false(self):
         self.flag = False
 
 @contextmanager
@@ -28,7 +28,7 @@ def run_on_exit_if_true(fn:Callable[[], Any], init_value=False):
     >>> with run_on_exit_if_true(lambda:a.append(10)) as trigger:
             for value in list:
                 if value==7:
-                    trigger.true_()
+                    trigger.true()
     >>> a
     [10]
     '''

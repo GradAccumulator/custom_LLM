@@ -12,7 +12,7 @@ def _load(func_name, dict, name, file_name:str|None=None):
         )
     except RuntimeError as e:
         if e.args[0].startswith('Error building extension'):
-            _load(func_name, file_name)
+            _load(func_name, dict, name, file_name)
 
 def load_cpp(func_name, file_name:str|None=None,*,dict,name):
     if file_name is None:

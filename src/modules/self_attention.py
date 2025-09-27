@@ -33,11 +33,11 @@ class SelfAttention(BaseModule):
     ):
         if d_model%num_heads != 0 and d_head is None:
             raise AttributeError("d_model과 head 개수가 맞지 않습니다.")
+        super().__init__(device, dtype, d_model=d_model, num_heads=num_heads, d_head=d_head, use_bias=use_bias, init_method=init_method, mask_dtype=mask_dtype, seq_len=seq_len, qk_std_init=qk_std_init, learnable_qk_std=learnable_qk_std, dropout_p=dropout_p, eps=eps)
         if d_head is None:
             self.d_head = d_model//num_heads
         else:
             self.d_head = d_head
-        super().__init__(device, dtype)
         self.d_model = d_model
         self.num_heads = num_heads
         self._use_bias = use_bias
@@ -53,7 +53,8 @@ class SelfAttention(BaseModule):
         
         if self.seq_len is not None:
             self.cached_mask = torch.full((self.seq_len, self.seq_len), float('-inf'), device=self._device, dtype=mask_dtype).triu(diagonal=1)
-        else:
+            self.add_to__apply('cached_mask', self.cached_mask)
+        else: 
             self.cached_mask = None
             
         self.recip_root_d_k = 1/(self.d_head**0.5)
@@ -71,19 +72,14 @@ class SelfAttention(BaseModule):
         self.linear_qkv = Linear(self.d_model, self.num_heads*self.d_head*3, device=self._device, dtype=self._dtype, init_method=self.init_method, use_bias=self.use_bias)
         self.linear_output = Linear(self.num_heads*self.d_head, self.d_model, device=self._device, dtype=self._dtype, init_method=self.init_method, use_bias=self.use_bias)
     
-    def reset_cache(self):
+    def reset_cache(self, set_to_none=False):
+        self.cache_offset = IntRef(0)
+        if set_to_none:
+            self.k_cache = None
+            self.v_cache = None
+            return
         self.k_cache = torch.empty((self.seq_len, self.num_heads, self.d_head), device=self._device, dtype=self._dtype)
         self.v_cache = torch.empty((self.seq_len, self.num_heads, self.d_head), device=self._device, dtype=self._dtype)
-        self.cache_offset = IntRef(0)
-    @property
-    def is_training(self):
-        return not self._is_inference
-    @property
-    def mode(self):
-        return 'train' if self.is_training else 'inference'
-    @property
-    def is_inference(self):
-        return self._is_inference
     
     @property
     def use_bias(self):
@@ -108,81 +104,19 @@ class SelfAttention(BaseModule):
             self.eps,
             self.k_cache,
             self.v_cache,
-            self.is_inference,
+            self.is_inferencing,
             self.cache_offset
         )
     
-    def __call__(self, x):
-        return self.forward(x)
-    
-    def to(self, device=None, dtype=None):
-        device, dtype = 보이면_바로_교체하기(device, dtype)
-        new = self.init_like()
-        device = device or self._device
-        dtype = dtype or self._dtype
-        new.linear_qkv = self.linear_qkv.to(device, dtype)
-        new.linear_output = self.linear_output.to(device, dtype)
-        new.cached_mask = self.cached_mask.to(device, dtype)
-        if self.qk_std_init is not None:
-            new.qk_std_exp = self.qk_std_exp.to(device, dtype)
-        new._device = device
-        new._dtype = dtype
-        return new
-    
-    def eval(self):
-        if self.use_dropout:
-            self.dropout.eval()
     def train(self):
-        if self.use_dropout:
-            self.dropout.train()
-        self._is_inference = False
-        self.k_cache = None
-        self.v_cache = None
-        self.cache_offset = IntRef(0)
+        self.reset_cache(set_to_none=True)
+        return super().train()
+    def eval(self):
+        self.reset_cache(set_to_none=True)
+        return super().eval()
     def inference(self):
-        self._is_inference = True
         self.reset_cache()
-    @property
-    def mode(self):
-        return self.dropout.mode
-    
-    def clone(self):
-        atten = self.init_like()
-        atten.linear_qkv = self.linear_qkv.clone()
-        atten.linear_output = self.linear_output.clone()
-        if self.use_qk_std:
-            atten.qk_std_exp = self.qk_std_exp.clone()
-        return atten
-    
-    def init_like(self):
-        return SelfAttention(
-            self.d_model, self.num_heads, 
-            device              =self._device, 
-            dtype               =self._dtype, 
-            use_bias            =self.use_bias, 
-            init_method         =self.init_method, 
-            seq_len             =self.seq_len, 
-            qk_std_init         =self.qk_std_init, 
-            learnable_qk_std    =hasattr(self, 'qk_std_exp') and self.qk_std_exp.learnable, 
-            dropout_p           =self.dropout.p if self.use_dropout else 0.0,
-            mask_dtype          =self.mask_dtype
-        )
-    
-    def state_dict(self):
-        return {
-            'linear': self.linear_qkv.state_dict(),
-            'qk_std_exp': self.qk_std_exp.state_dict() if hasattr(self, 'qk_std_exp') and self.qk_std_exp.learnable else None,
-            'W_o': self.linear_output.state_dict(),
-        }
-        
-    def load_state(self, state):
-        try:
-            self.linear_qkv.load_state(state['linear'])
-            if hasattr(self, 's_goal_exp') and self.qk_std_exp.learnable:
-                self.qk_std_exp.load_state(state['s_goal_exp'])
-        except ValueError as e:
-            print("Error in SelfAttention.load_state")
-            raise e
+        return super().inference()
         
     def __repr__(self):
         s_goal_exp_repr = ''
@@ -196,7 +130,7 @@ class SelfAttention(BaseModule):
                     f"    <<qk_std_exp>>\n"
                     f'    {repr(self.qk_std_exp.scale.flatten())}\n'
                 )
-        return super().__repr__((
+        return (
             f'SelfAttention(\n'
             f'    d_model={self.d_model},\n'
             f'    num_heads={self.num_heads},\n'
@@ -209,4 +143,4 @@ class SelfAttention(BaseModule):
             +s_goal_exp_repr+
             f'    mask_dtype={self.mask_dtype}\n'
             f')'
-        ))
+        )

@@ -17,14 +17,11 @@ class Softmax(ActivationFunction):
     def exp_with_temp(self, x:torch.Tensor):
         return (x*self.reciprocal_temp).exp()
 
-    def softmax(self, x:torch.Tensor):
+    def forward(self, x:torch.Tensor):
         scaled = x - x.max(dim=self.dim, keepdim=True).values
         exps = self._exp(scaled)
         sum = exps.sum(dim=self.dim, keepdim=True)
         return exps/sum
-    
-    def __call__(self, x:torch.Tensor):
-        return self.softmax(x)
     
     def __repr__(self):
         return f"Softmax(dim={self.dim}, temperature={self.temp})"

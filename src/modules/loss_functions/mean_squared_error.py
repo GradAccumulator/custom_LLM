@@ -8,11 +8,11 @@ class MeanSquaredError(LossFunction):
         return cls._instance
     def __init__(self):...
     
-    def mean_squared_error(self, pred:torch.Tensor, label:torch.Tensor) -> torch.Tensor:
+    def forward(self, pred:torch.Tensor, label:torch.Tensor) -> torch.Tensor:
         return torch.mean((pred-label)**2)
     
     def __call__(self, pred:torch.Tensor, label:torch.Tensor) -> torch.Tensor:
-        return self.mean_squared_error(pred, label)
+        return self.forward(pred, label)
     
     def __repr__(self):
         return "MeanSquaredError()"

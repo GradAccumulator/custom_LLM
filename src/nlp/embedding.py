@@ -5,7 +5,7 @@ from src.utils.torch_utils import 보이면_바로_교체하기
 
 class Embedding(BaseModule):
     def __init__(self, d_in, d_out, dtype=torch.float32, device='cpu'):
-        super().__init__(device=device, dtype=dtype)
+        super().__init__(device_=device, dtype_=dtype)
         self._d_in = d_in
         self._d_out = d_out
         self._std_weights = math.sqrt(2/(d_in+d_out))

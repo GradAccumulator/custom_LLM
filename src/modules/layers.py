@@ -1,6 +1,6 @@
 import torch
 from typing import overload, Any
-from src.utils.torch_utils import 보이면_바로_교체하기
+#from src.utils.torch_utils import _
 from src.modules.to import To
 from .base_module import BaseModule
 
@@ -36,6 +36,8 @@ class Layers(BaseModule):
     @overload
     def __init__(self, *, num_layers, device='cpu', dtype=torch.float32, save_inputs=False, **modules):...
     def __init__(self, *modules_list, num_layers, device='cpu', dtype=torch.float32, save_inputs=False, **modules_dict):
+        super().__init__(device, dtype, *modules_list, num_layers, device, dtype, save_inputs, **modules_dict)
+        
         if modules_dict and modules_list:
             raise ValueError('modules_dict와 modules_list를 동시에 전달할 수 없습니다.')
         elif not modules_dict and not modules_list:
@@ -56,27 +58,15 @@ class Layers(BaseModule):
         #modules 인자가 list이든 dict이든 상관없이 
         #self.modules:dict[str, BaseModule]로 저장함
         
-        super().__init__(device=device, dtype=dtype)
-        self.modules:dict[str, BaseModule] = modules
+        super().setattr('modules', modules)
+        self.modules:dict[str, BaseModule]
+        
         self.num_layers = num_layers
         self.layers = [{} for _ in range(self.num_layers)]
         self._set_layers(modules)
         self.save_inputs = save_inputs
         if self.save_inputs:
             self.inputs = {}
-
-    def _set_layers(self, modules:dict):
-        layer = {}
-        for i in range(self.num_layers):
-            for k,m in modules.items():
-                if hasattr(m, 'init_like'):
-                    m = m.init_like()
-                if not isinstance(m, To) and hasattr(m, 'to'):
-                    layer[k] = m.to(device=self._device, dtype=self._dtype)
-                else:
-                    layer[k] = m
-            self.set_layer(i, layer)
-            layer = {}
     
     def forward(self, x):
         try:
@@ -89,9 +79,6 @@ class Layers(BaseModule):
             print(f"error in layer {layer.idx}, module {key}")
             raise e
     
-    def __call__(self, x):
-        return self.forward(x)
-    
     def __len__(self):
         return len(self.layers)
     
@@ -100,86 +87,17 @@ class Layers(BaseModule):
             raise IndexError
         return self.layers[idx]
     
-    def __setitem__(self, idx:int|str, layer:LayerWrapper):
-        if idx>=len(self.layers):
-            raise IndexError
-        self.layers[idx] = layer
-        for key,module in layer.items():
-            self.set_module(idx, key, module)
-            
-    def reset_parameters(self):
-        self._buffer = {}
+    def _set_layers(self, modules:dict[str,BaseModule]):
         for i in range(self.num_layers):
-            for k,m in self.layers[i].items():
-                if hasattr(m, '_parameters'):
-                    for n,p in m._parameters.items():
-                        self._buffer[f'layers[{i}][{k}]({m.__class__.__name__}).{n}'] = p
+            for k,m in modules.items():
+                if isinstance(m, BaseModule):
+                    m = m.init_like()
+                    for name,param in m._buffer.items():
+                        self._buffer[f'layers[{i}][{k}]({m.__class__.__name__}).{name}'] = param
+                    self._modules[f'layers[{i}][{k}]'] = m
+                self.layers[i][k] = m
+            self.layers[i] = LayerWrapper(self.layers[i], i)
     
-    def set_module(self, idx:int, key:str, module):
-        if idx>=len(self.layers):
-            raise IndexError
-        self.layers[idx][key] = module
-        if isinstance(module, BaseModule): 
-            for k,p in module._buffer.items():
-                key_  = f'layers[{idx}][{key}]({self.layers[idx][key].__class__.__name__}).{k}'
-                if key_  in self._buffer.keys():
-                    self._buffer.pop(key_ )
-                self._buffer[key_ ] = p
-    def set_layer(self, idx:int, layer:dict[str,Any]):
-        if idx>=len(self.layers):
-            raise IndexError
-        self.layers[idx] = LayerWrapper(layer, idx)
-        for key,module in layer.items():
-            if hasattr(module, '_parameters'):
-                for k,p in module._parameters.items():
-                    self._buffer[f'layers[{idx}][{key}]({module.__class__.__name__}).{k}'] = p
-    
-    def to(self, device=None, dtype=None):
-        device, dtype = 보이면_바로_교체하기(device, dtype)
-        if (self._device==device or device is None) and (self._dtype == dtype or dtype is None):
-            return self
-        new = self.clone()
-        new._device = device or self._device
-        new._dtype = dtype or self._dtype
-        for i in range(self.num_layers):
-            for k in new.modules.keys():
-                if not isinstance(new[i][k], To) and hasattr(new[i][k], 'to'):
-                    new.set_module(i, k, new.layers[i][k].to(device=new._device, dtype=new._dtype))
-        for k in new.modules.keys():
-            if hasattr(new.modules[k], 'to'):
-                new.modules[k] = new.modules[k].to(device=new._device, dtype=new._dtype)
-        new.reset_parameters()
-        return new
-    
-    def init_like(self):
-        if self.is_dict:
-            return Layers(self.modules, num_layers=self.num_layers, device=self._device, dtype=self._dtype, save_inputs=self.save_inputs)
-        return Layers(*list(self.modules.values()), num_layers=self.num_layers, device=self._device, dtype=self._dtype, save_inputs=self.save_inputs)
-    
-    def clone(self):
-        new = self.init_like()
-        for i in range(self.num_layers):
-            for k,m in self.layers[i].items():
-                if hasattr(m, 'clone'):
-                    new[i][k] = m.clone()
-        new.reset_parameters()
-        return new
-    
-    def state_dict(self):
-        return {i:{k:v.state_dict() for k,v in layer.items() if hasattr(v, 'state_dict')} for i,layer in enumerate(self.layers)}
-    
-    def load_state(self, state):
-        for i,layer in state.items():
-            for k,m in layer.items():
-                if not hasattr(self[i][k], 'load_state'):
-                    raise ValueError(
-                            '<<Layers.load_state>>\n'
-                        f"Layer {i}, Module {k} has not load_state method.\n"
-                        "Cannot load state for this layer.\n"
-                        f'(layer keys: {list(layer.keys())})'
-                    )
-                self[i][k].load_state(m)
-                
     def __repr__(self):
         return (
                     'Layers(\n'

@@ -12,8 +12,5 @@ class Tanh(ActivationFunction):
     def forward(self, x:torch.Tensor):
         return _C.tanh(x)
     
-    def __call__(self, x:torch.Tensor):
-        return self.forward(x)
-    
     def __repr__(self):
         return "Tanh()"

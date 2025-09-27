@@ -1,4 +1,5 @@
 from torch import Tensor
+from .base_module import BaseModule
 class Residual:
     def __init__(self):
         self.value = None
@@ -18,12 +19,5 @@ class Residual:
     def sum(self):
         return self.sum_wrapper
     
-    def clone(self):
-        res = Residual()
-        res.value = self.value.detach().clone() if isinstance(self.value, Tensor) else self.value
-        return res
-    def init_like(self):
-        return Residual()
-    
     def __repr__(self):
-        return f'Residual(value={self.value})'
+        return f'Residual()'
