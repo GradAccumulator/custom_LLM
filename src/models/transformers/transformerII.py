@@ -101,7 +101,7 @@ class TransformerII:
     
     def parameters(self):
         return self.model.parameters()
-    def parameters_as_dict(self):
+    def named_parameters(self):
         return self.model.named_parameters() 
     
     def encode(self, x:list[str],*, is_dataset=False, max_length=10000) -> torch.Tensor:

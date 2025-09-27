@@ -36,7 +36,7 @@ if __name__ == '__main__':
         with timer("optimizer & scheduler 생성"):
             max_lr = 1e-4
             optimizer = Adam(
-                model.parameters_as_dict(),
+                model.named_parameters(),
                 max_lr,
                 0.9, 0.95, 1e-3,
                 eps=1e-8,
