@@ -38,8 +38,8 @@ if __name__ == '__main__':
             optimizer = Adam(
                 model.parameters_as_dict(),
                 max_lr,
-                0.9, 0.98, 1e-2,
-                eps=1e-10,
+                0.9, 0.95, 1e-3,
+                eps=1e-8,
                 clip_grad=5,
                 device_transfer_while_conputing_mv=True,
             )

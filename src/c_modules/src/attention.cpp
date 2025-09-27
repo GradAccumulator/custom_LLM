@@ -124,7 +124,7 @@ private:
 	) {
 		if (p_drop == 0.0f)return {x, torch::Tensor()};
 
-		auto mask = ((torch::rand({x.size(-2), x.size(-1)}, torch::TensorOptions().device(x.device()).dtype(torch::kHalf)) > p_drop)/(1-p_drop));
+		auto mask = ((torch::rand(x.sizes(), torch::TensorOptions().device(x.device()).dtype(torch::kHalf)) > p_drop)/(1-p_drop));
 		return {x*mask, mask};
 	}
 
