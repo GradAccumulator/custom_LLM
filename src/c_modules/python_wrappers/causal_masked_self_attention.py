@@ -4,7 +4,8 @@ from ..src.setup import (
     torch
 )
 
-_attention = load_cpp('attention')
+_attention = None
+load_cpp('attention', dict=globals(), name='_attention')
 
 class IntRef(int):
     def __init__(self, value):

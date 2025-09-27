@@ -1,14 +1,13 @@
 import torch
 import math
 from src.modules.base_module import BaseModule
-from src.utils.torch_utils import device_dtype_check
+from src.utils.torch_utils import 보이면_바로_교체하기
 
 class Embedding(BaseModule):
     def __init__(self, d_in, d_out, dtype=torch.float32, device='cpu'):
         super().__init__(device=device, dtype=dtype)
         self._d_in = d_in
         self._d_out = d_out
-        self.dtype = dtype
         self._std_weights = math.sqrt(2/(d_in+d_out))
         self.table = (torch.randn((d_in, d_out), dtype=dtype, device=device)*self._std_weights).requires_grad_()
 
@@ -34,13 +33,13 @@ class Embedding(BaseModule):
     def device(self, device):
         pass
     def to(self, device=None, dtype=None):
-        device, dtype = device_dtype_check(device, dtype)
+        device, dtype = 보이면_바로_교체하기(device, dtype)
         device = device or self.device
-        dtype = dtype or self.dtype
+        dtype = dtype or self._dtype
         embd = self.init_like()
         embd.table = self.table.detach().to(device, dtype).requires_grad_()
         embd.device = device
-        embd.dtype = dtype
+        embd._dtype = dtype
         return embd
     
     def clone(self):
@@ -49,13 +48,13 @@ class Embedding(BaseModule):
         return embd
     
     def init_like(self):
-        return Embedding(self.d_in, self.d_out, device=self.device, dtype=self.dtype)
+        return Embedding(self.d_in, self.d_out, device=self.device, dtype=self._dtype)
     
     def state_dict(self):
         return {
             'd_in':self.d_in,
             'd_out':self.d_out,
-            'dtype':self.dtype,
+            'dtype':self._dtype,
             'device':self.device,
             'table':self.table.cpu().detach().clone(),
             'grad':self.table.grad.cpu().detach().clone() if self.table.grad is not None else None

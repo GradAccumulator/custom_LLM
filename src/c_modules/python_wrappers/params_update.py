@@ -1,8 +1,12 @@
 from ..src.setup import *
 
-_step_with_wd = load_cpp('step_with_wd', 'params_update')
-_step_with_none = load_cpp('step_with_none', 'params_update')
-_zero_grad = load_cpp("zero_grad", "params_update")
+
+_step_with_wd   = None
+_step_with_none = None
+_zero_grad      = None
+load_cpp('step_with_wd', 'params_update', dict=globals(), name="_step_with_wd")
+load_cpp('step_with_none', 'params_update', dict=globals(), name="_step_with_none")
+load_cpp("zero_grad", "params_update", dict=globals(), name="_zero_grad")
 
 def step_with_wd(
     map_tensor:dict[str, dict[str, Tensor|tuple[Tensor, float]]],

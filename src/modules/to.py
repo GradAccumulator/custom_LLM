@@ -1,9 +1,9 @@
 import torch
-from src.utils.torch_utils import device_dtype_check
+from src.utils.torch_utils import 보이면_바로_교체하기
 
 class To:
     def __init__(self, device=None, dtype=None):
-        device,dtype = device_dtype_check(device, dtype)
+        device,dtype = 보이면_바로_교체하기(device, dtype)
         self.device = device
         self.dtype = dtype
         
@@ -14,7 +14,7 @@ class To:
         return self.forward(x)
     
     def to(self, device=None, dtype=None):
-        device, dtype = device_dtype_check(device, dtype)
+        device, dtype = 보이면_바로_교체하기(device, dtype)
         return To(device=device or self.device, dtype=dtype or self.dtype)
     
     def __repr__(self):

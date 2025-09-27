@@ -27,6 +27,9 @@ using namespace std;
 
 class CausalMaskedSelfAttention : public torch::autograd::Function<CausalMaskedSelfAttention> {
 private:
+	#define DEBUG false
+	#define debug if(DEBUG)cout
+	#define Debug(X) cout << X << endl
 	
 	//Returns {Q, K, V} or {Q, K, V, Q_raw, K_raw, Q_scale, K_scale, qk_std}
 	static torch::autograd::tensor_list get_qkv(
@@ -248,10 +251,6 @@ public:
 		});
 		return atten_out[0]; // attention output
 	}
-
-private:
-	#define DEBUG false
-	#define debug if(DEBUG)cout
 
 public:	
 	static torch::autograd::variable_list backward(

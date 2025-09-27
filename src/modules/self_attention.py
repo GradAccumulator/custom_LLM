@@ -4,7 +4,7 @@ from .linear import Linear
 from .scale import Scale
 from .activation_functions import Softmax
 from .dropout import Dropout
-from src.utils.torch_utils import device_dtype_check
+from src.utils.torch_utils import 보이면_바로_교체하기
 import src.c_modules as _C
 import math
 
@@ -52,7 +52,7 @@ class SelfAttention(BaseModule):
             self.dropout = Dropout(p=dropout_p)
         
         if self.seq_len is not None:
-            self.cached_mask = torch.full((self.seq_len, self.seq_len), float('-inf'), device=self.device, dtype=mask_dtype).triu(diagonal=1)
+            self.cached_mask = torch.full((self.seq_len, self.seq_len), float('-inf'), device=self._device, dtype=mask_dtype).triu(diagonal=1)
         else:
             self.cached_mask = None
             
@@ -60,7 +60,7 @@ class SelfAttention(BaseModule):
         self.qk_std_init = qk_std_init
 
         if self.qk_std_init is not None:
-            self.qk_std_exp = Scale(math.exp(self.qk_std_init)-1, shape=(self.num_heads, 1, 1), learnable=learnable_qk_std, device=self.device, dtype=self.dtype)
+            self.qk_std_exp = Scale(math.exp(self.qk_std_init)-1, shape=(self.num_heads, 1, 1), learnable=learnable_qk_std, device=self._device, dtype=self._dtype)
             self.use_qk_std = True
         else:
             self.use_qk_std = False
@@ -68,12 +68,12 @@ class SelfAttention(BaseModule):
         self.train()
     
     def reset_params(self):
-        self.linear_qkv = Linear(self.d_model, self.num_heads*self.d_head*3, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
-        self.linear_output = Linear(self.num_heads*self.d_head, self.d_model, device=self.device, dtype=self.dtype, init_method=self.init_method, use_bias=self.use_bias)
+        self.linear_qkv = Linear(self.d_model, self.num_heads*self.d_head*3, device=self._device, dtype=self._dtype, init_method=self.init_method, use_bias=self.use_bias)
+        self.linear_output = Linear(self.num_heads*self.d_head, self.d_model, device=self._device, dtype=self._dtype, init_method=self.init_method, use_bias=self.use_bias)
     
     def reset_cache(self):
-        self.k_cache = torch.empty((self.seq_len, self.num_heads, self.d_head), device=self.device, dtype=self.dtype)
-        self.v_cache = torch.empty((self.seq_len, self.num_heads, self.d_head), device=self.device, dtype=self.dtype)
+        self.k_cache = torch.empty((self.seq_len, self.num_heads, self.d_head), device=self._device, dtype=self._dtype)
+        self.v_cache = torch.empty((self.seq_len, self.num_heads, self.d_head), device=self._device, dtype=self._dtype)
         self.cache_offset = IntRef(0)
     @property
     def is_training(self):
@@ -95,8 +95,8 @@ class SelfAttention(BaseModule):
         '''
         return _C.causal_masked_self_attention(
             x,
-            self.linear_qkv.weight,
-            self.linear_output.weight,
+            self.linear_qkv.weight.T,
+            self.linear_output.weight.T,
             self.num_heads,
             self.d_head,
             self.seq_len,
@@ -116,17 +116,17 @@ class SelfAttention(BaseModule):
         return self.forward(x)
     
     def to(self, device=None, dtype=None):
-        device, dtype = device_dtype_check(device, dtype)
+        device, dtype = 보이면_바로_교체하기(device, dtype)
         new = self.init_like()
-        device = device or self.device
-        dtype = dtype or self.dtype
+        device = device or self._device
+        dtype = dtype or self._dtype
         new.linear_qkv = self.linear_qkv.to(device, dtype)
         new.linear_output = self.linear_output.to(device, dtype)
         new.cached_mask = self.cached_mask.to(device, dtype)
         if self.qk_std_init is not None:
             new.qk_std_exp = self.qk_std_exp.to(device, dtype)
-        new.device = device
-        new.dtype = dtype
+        new._device = device
+        new._dtype = dtype
         return new
     
     def eval(self):
@@ -157,8 +157,8 @@ class SelfAttention(BaseModule):
     def init_like(self):
         return SelfAttention(
             self.d_model, self.num_heads, 
-            device              =self.device, 
-            dtype               =self.dtype, 
+            device              =self._device, 
+            dtype               =self._dtype, 
             use_bias            =self.use_bias, 
             init_method         =self.init_method, 
             seq_len             =self.seq_len, 
@@ -200,8 +200,8 @@ class SelfAttention(BaseModule):
             f'SelfAttention(\n'
             f'    d_model={self.d_model},\n'
             f'    num_heads={self.num_heads},\n'
-            f'    device={self.device},\n'
-            f'    dtype={self.dtype},\n'
+            f'    device={self._device},\n'
+            f'    dtype={self._dtype},\n'
             f'    init_method={self.init_method},\n'
             f'    seq_len={self.seq_len},\n'
             f'    dropout_p={self.dropout.p if self.use_dropout else 0.0},\n'

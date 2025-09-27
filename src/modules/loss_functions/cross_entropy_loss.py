@@ -1,7 +1,7 @@
 import torch
 from src.utils.types import PathLike, Path, ListLike, Tensor
 from .loss_function import LossFunction
-from src.utils.torch_utils import device_dtype_check
+from src.utils.torch_utils import 보이면_바로_교체하기
 
 class CrossEntropyLoss(LossFunction):
     def __init__(self,*, 
@@ -26,7 +26,7 @@ class CrossEntropyLoss(LossFunction):
         self.loss_scale = loss_scale
         
     def to(self, device=None, dtype=None):
-        _,dtype = device_dtype_check(device, dtype)
+        _,dtype = 보이면_바로_교체하기(device, dtype)
         if self.device==device or device is None:
             return self
         new= CrossEntropyLoss(logit_input=self.logit_input, ignore_label_indices=self.ignore_indices, dim=self.dim, device=self.device, stability_scale=self.stability_scale, weight=self.weight)

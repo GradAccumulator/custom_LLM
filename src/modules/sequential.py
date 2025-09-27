@@ -1,6 +1,6 @@
 import torch
 from typing import overload, Any
-from src.utils.torch_utils import device_dtype_check
+from src.utils.torch_utils import 보이면_바로_교체하기
 from src.modules.to import To
 from .base_module import BaseModule
 
@@ -42,7 +42,7 @@ class Sequential(BaseModule):
 
         for k in self.layers.keys():
             if not isinstance(self.layers[k], To) and hasattr(self.layers[k], 'to'):
-                self[k] = self.layers[k].to(device=self.device, dtype=self.dtype)
+                self[k] = self.layers[k].to(device=self._device, dtype=self._dtype)
     
     def forward(self, x:torch.Tensor)->torch.Tensor:
         try:
@@ -58,17 +58,17 @@ class Sequential(BaseModule):
         return self.forward(x)
     
     def to(self, device=None, dtype=None):
-        device, dtype = device_dtype_check(device, dtype)
-        if (device is None and dtype is None) or (self.device == device and self.dtype == dtype):
+        device, dtype = 보이면_바로_교체하기(device, dtype)
+        if (device is None and dtype is None) or (self._device == device and self._dtype == dtype):
             return self
         seq = self.clone()
-        device = device or self.device
-        dtype = dtype or self.dtype
+        device = device or self._device
+        dtype = dtype or self._dtype
         for k in seq.layers.keys():
             if not isinstance(seq[k], To) and hasattr(seq[k], 'to'):
                 seq[k] = seq[k].to(device=device, dtype=dtype)
-        seq.device = device
-        seq.dtype = dtype
+        seq._device = device
+        seq._dtype = dtype
         return seq
     
     def __len__(self):
@@ -83,13 +83,13 @@ class Sequential(BaseModule):
             raise KeyError(idx)
         if isinstance(value, BaseModule):
             pop_list = []
-            for k in self._parameters.keys():
+            for k in self._buffer.keys():
                 if k[k.find('[')+1:k.find(']')] == str(idx):
                     pop_list.append(k)
             for k in pop_list:
-                self._parameters.pop(k)
-            for k,v in value._parameters.items():
-                self._parameters[f'Sequantial[{idx}].{k}'] = v
+                self._buffer.pop(k)
+            for k,v in value._buffer.items():
+                self._buffer[f'Sequantial[{idx}].{k}'] = v
         self.layers[idx] = value
     def keys(self):
         return self.layers.keys()
@@ -100,9 +100,9 @@ class Sequential(BaseModule):
     
     def _shallow_copy(self):
         if self.is_dict:
-            seq = Sequential(self.layers, device=self.device, dtype=self.dtype)
+            seq = Sequential(self.layers, device=self._device, dtype=self._dtype)
         else:
-            seq = Sequential(*list(self.layers.values()), device=self.device, dtype=self.dtype)
+            seq = Sequential(*list(self.layers.values()), device=self._device, dtype=self._dtype)
         return seq
         
     
@@ -156,8 +156,8 @@ class Sequential(BaseModule):
     def __repr__(self):
         return super().__repr__((
             f'Sequential(\n'
-            f'    device={self.device},\n'
-            f'    dtype={self.dtype},\n'
+            f'    device={self._device},\n'
+            f'    dtype={self._dtype},\n'
             f'    <<layers>>\n    '
             +'\n    '.join([f'{i}: {module}' for i,module in self.layers.items()])
             +'\n)'

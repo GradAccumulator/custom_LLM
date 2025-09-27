@@ -1,11 +1,11 @@
 import torch
 from src.modules.base_module import BaseModule
-from src.utils.torch_utils import device_dtype_check
+from src.utils.torch_utils import 보이면_바로_교체하기
 
 class BaseModel:
     def __init__(self, device='cpu', dtype=torch.float32):
         self._parameters = {}
-        self.device,self.dtype = device_dtype_check(device, dtype)
+        self.device,self.dtype = 보이면_바로_교체하기(device, dtype)
     
     def __setattr__(self, name, value):
         if not hasattr(self, '_parameters'):
@@ -17,5 +17,5 @@ class BaseModel:
                 )
             self._parameters[f"{self.__class__.__name__}.{name}"] = value
         elif isinstance(value, BaseModule):
-            for n,p in value._parameters:
+            for n,p in value._buffer:
                 self._parameters[f"{self.__class__.__name__}.{name}.{n}"] = p

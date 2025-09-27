@@ -1,7 +1,41 @@
 from time import time
 from contextlib import contextmanager
 from os.path import join
-import torch
+from typing import Callable, Any
+import keyword
+
+
+def is_valid_varname(s:str)->bool:
+    return s.isidentifier() and not keyword.iskeyword(s)
+
+class BoolWrapper:
+    def __init__(self, value=False):
+        self.flag = value
+    
+    def true_(self):
+        self.flag = True
+    
+    def false_(self):
+        self.flag = False
+
+@contextmanager
+def run_on_exit_if_true(fn:Callable[[], Any], init_value=False):
+    '''
+    init_value 값을 가진 BoolWrapper변수를 return함.
+    이후에 해당 리턴값이 True면 fn을 실행함
+    >>> a = []
+    >>> list = [1,2,3,4,5,6,7]
+    >>> with run_on_exit_if_true(lambda:a.append(10)) as trigger:
+            for value in list:
+                if value==7:
+                    trigger.true_()
+    >>> a
+    [10]
+    '''
+    trigger = BoolWrapper(init_value)
+    yield trigger
+    if trigger.flag:
+        fn()
 
 __tab_num = 0
 @contextmanager

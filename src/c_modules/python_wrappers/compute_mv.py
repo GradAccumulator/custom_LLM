@@ -4,7 +4,8 @@ from ..src.setup import (
     torch
 )
 
-_computeMV_wrapper = load_cpp('computeMV_wrapper', 'compute_mv')
+_computeMV_wrapper = None
+load_cpp('computeMV_wrapper', 'compute_mv', dict=globals(), name='_computeMV_wrapper')
 
 def computeMV_wrapper(
     params:dict[str, Tensor], 

@@ -4,7 +4,8 @@ from ..src.setup import (
     torch
 )
 
-_dropout = load_cpp("dropout")
+_dropout = None
+load_cpp("dropout", dict=globals(), name='_dropout')
 
 def dropout(x:Tensor, p:float):
     return _dropout.dropout(x, p)

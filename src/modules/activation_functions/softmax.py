@@ -1,6 +1,6 @@
 import torch
 from .activation_function import ActivationFunction
-from src.utils.torch_utils import device_dtype_check
+from src.utils.torch_utils import 보이면_바로_교체하기
 
 class Softmax(ActivationFunction):
     def __init__(self, dim=-1, temperature=1.0):
