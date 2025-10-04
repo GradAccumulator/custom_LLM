@@ -1,2 +1,2 @@
-from .transformer import Transformer
-from .transformerII import TransformerII
+from .Transformer import Transformer
+from .transformerII import MyTransformer

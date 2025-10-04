@@ -15,8 +15,9 @@ public:
 
     if(p==0.0f) return x;
     
-    auto mask = (torch::rand(x.sizes(), torch::TensorOptions().device(x.device()).dtype(torch::kHalf))>p).to(x.dtype()).div_(1-p);
+    auto mask = (torch::rand({x.size(-2), x.size(-1)}, torch::TensorOptions().device(x.device()).dtype(torch::kHalf))>p).to(x.dtype()).div_(1-p);
 
+    ctx->saved_data["dtype"] = x.dtype().toScalarType();
     ctx->save_for_backward({mask});
     return x.mul(mask);
   }
@@ -27,7 +28,8 @@ public:
     if(ctx->saved_data["is_not_training"].toBool()) 
       return {grad_output[0], torch::Tensor()};
     
-    return {grad_output[0].mul(ctx->get_saved_variables()[0]), torch::Tensor()};
+    auto dtype = ctx->saved_data["dtype"].toScalarType();
+    return {grad_output[0].mul(ctx->get_saved_variables()[0].to(dtype)), torch::Tensor()};
   }
 };
 

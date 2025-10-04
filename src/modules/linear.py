@@ -1,9 +1,30 @@
 import torch
-from .base_module import BaseModule
-from src.utils.torch_utils import 보이면_바로_교체하기
+from .base_module import Module
 from typing import Optional, Callable, overload, Any
 
-class Linear(BaseModule):
+class _linear(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx:torch.autograd.function.FunctionCtx, input, weight, bias=None):
+        ctx.save_for_backward(
+            input   , 
+            weight  , 
+        )
+        ctx.bias_is_none = bias is None
+        if ctx.bias_is_none:
+            return input @ weight.T.to(input.dtype)
+        return input @ weight.T.to(input.dtype) + bias.to(input.dtype)
+    @staticmethod
+    def backward(ctx:torch.autograd.function.FunctionCtx, grad_output):
+        input, weight = ctx.saved_tensors
+        grad_input = grad_output @ weight.to(grad_output.dtype)
+        grad_weight = grad_output.transpose(-2,-1) @ input.to(grad_output.dtype)
+        if not ctx.bias_is_none:
+            grad_bias = grad_output.sum(0)
+        else:
+            grad_bias = None
+        return grad_input, grad_weight, grad_bias
+
+class Linear(Module):
     d_in_ = int
     d_out_ = int
     parameter = torch.Tensor
@@ -39,11 +60,11 @@ class Linear(BaseModule):
         super().init_weights(self.init_method)
         if self._use_bias:
             self.bias = torch.zeros((self.d_out,), dtype=self._dtype, device=self._device, requires_grad=True)
+        else:
+            self.bias = None
     
     def forward(self, x:torch.Tensor):
-        if self._use_bias:
-            return x@self.weight.T.to(x.dtype) + self.bias.to(x.dtype)
-        return x@self.weight.T.to(x.dtype)
+        return _linear.apply(x, self.weight, self.bias)
     @property
     def use_bias(self):
         return self._use_bias

@@ -10,7 +10,7 @@ struct results {
     int act_len;
 };
 
-//gcc -shared -o src/c_modules/dlls/seq_windows.dll src/c_modules/seq_windows.c
+//gcc -shared -o src/c_modules/dlls/seq_windows.dll src/c_modules/src/seq_windows.c
 __declspec(dllexport)
 struct results make_seq_windows_with_padding(int16_t** encoded, int max_length, int size, int* lengths, int seq_len, float stride_rate, int pad_id) {
     /*
@@ -56,7 +56,7 @@ struct results make_seq_windows_with_padding(int16_t** encoded, int max_length, 
                     res.arr_x = out;
                     res.arr_label = out_label;
                     res.act_len = max_length;
-                    printf("c function complete\n");
+                    //printf("c function complete\n");
                     return res;
                 }
                 row_cnt++;
@@ -84,7 +84,7 @@ struct results make_seq_windows_with_padding(int16_t** encoded, int max_length, 
                     res.arr_x = out;
                     res.arr_label = out_label;
                     res.act_len = max_length;
-                    printf("c function complete\n");
+                    //printf("c function complete\n");
                     return res;
                 }
                 row_cnt++;
@@ -97,7 +97,7 @@ struct results make_seq_windows_with_padding(int16_t** encoded, int max_length, 
     res.arr_x = out;
     res.arr_label = out_label;
     res.act_len  = idx_out_row;
-    printf("c function complete\n");
+    //printf("c function complete\n");
     return res;
 }
 

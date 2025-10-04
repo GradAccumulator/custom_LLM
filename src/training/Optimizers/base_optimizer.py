@@ -1,14 +1,15 @@
 import torch
-from typing import (Callable, Any, ParamSpecKwargs)
+from typing import (Callable, Any, NewType)
 import src.c_modules as _C
 from src.utils.dev_utils import alert
 
 class BaseOptimizer:
-    def __init__(self, parameters:dict[str, torch.tensor], lr:float, weight_decay:float=0, clip_grad:float|bool=True, lr_scale:dict={}, loss_scale:float=1):
+    def __init__(self, parameters:dict[str, torch.tensor], lr:float, weight_decay:float=0, clip_grad:float|bool=True, lr_scale:dict={}):
         '''
-        parameters: a dict of parameters                                                    \n
-        lr: learning rate                                                                   \n                          
-        weight_decay: weight decay                                                          \n                  
+        Args:
+        parameters: a dict of parameters
+        lr: learning rate  
+        weight_decay: weight decay
         clip_grad: Whether to apply gradient clipping during training. or max norm. if you set clip_grad as True, the max norm is set to 1
         '''
         self.lr = lr
@@ -16,8 +17,6 @@ class BaseOptimizer:
         self._cached_params_as_dict = parameters
         self._cached_params_as_list = list(self._cached_params_as_dict.values())
         self.weight_decay = weight_decay
-        self.recip_loss_scale = 1/loss_scale
-        self.check_nan = True
         if isinstance(clip_grad, bool):
             if clip_grad:
                 self.max_grad_norm = 1
@@ -40,7 +39,7 @@ class BaseOptimizer:
         return self._cached_params_as_list
     
     @property
-    def params(self):
+    def named_parameters(self):
         return self.parameters_as_dict()
     
     @property
@@ -70,48 +69,42 @@ class BaseOptimizer:
                     'weight' not in key and key in self._ld.keys()}
             }
     
-    def clip_grad_norm(self, grad_accum=1):
+    FalseTensor = NewType('FalseTensor', torch.Tensor)
+    @torch.no_grad()
+    def clip_grad_norm(self)->torch.Tensor|FalseTensor:
         if self.clip_grad:
-            with torch.no_grad():
-                return torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=self.max_grad_norm/self.recip_loss_scale*grad_accum)*self.recip_loss_scale/grad_accum
+            return torch.nn.utils.clip_grad_norm_(self.named_parameters(), max_norm=self.max_grad_norm)
         return torch.tensor(False)
 
-    def step_with_wd(self, compute_grad_fn:Callable[[Any],dict[str,torch.Tensor]], grad_accum=1, **kwargs):
-        with torch.no_grad():
-            self.prev_grad_norm = self.clip_grad_norm(grad_accum)
-            gradients = compute_grad_fn(**kwargs)
-            try:
-                _C.step_with_wd(
-                    self._params,
-                    gradients,
-                    self.lr,
-                    self.weight_decay
-                )
-                # for k, p in self._params['weight_decay'].items():
-                #     p.sub_(self.lr * (gradients[k]  + self._wd*p))
-                # for k,p in self._params['others'].items():
-                #     p.sub_(self.lr  * gradients[k])
-                # for k,(p,ld) in self._params['ls_weight_decay'].items():
-                #     p.sub_(self.lr * ld*( gradients[k] + self._wd*p))
-                # for k,(p,ld) in self._params['ls_others'].items():
-                #     p.sub_(self.lr  * ld*gradients[k])
-            except Exception as e:
-                print(f'error in optimizer step_with_wd')
-                breakpoint()
-                raise e
-    def step_with_none(self, compute_grad_fn:Callable[[],dict[str,torch.Tensor]], grad_accum=1, **kwargs):
-        with torch.no_grad():
-            self.prev_grad_norm = self.clip_grad_norm(grad_accum)
-            gradients = compute_grad_fn(**kwargs)
-            _C.step_with_none(
+    @torch.no_grad()
+    def step_with_wd(self, compute_grad_fn:Callable[...,dict[str,torch.Tensor]], *args, **kwargs):
+        self.prev_grad_norm = self.clip_grad_norm()
+        gradients = compute_grad_fn(*args, **kwargs)
+        try:
+            _C.step_with_wd(
                 self._params,
                 gradients,
-                self.lr
+                self.lr,
+                self.weight_decay
             )
-                
-    def zero_grad(self):
-        with torch.no_grad():
-            _C.zero_grad(self.parameters())
+        except Exception as e:
+            print(f'error in optimizer step_with_wd')
+            breakpoint()
+            raise e
+    
+    @torch.no_grad()
+    def step_with_none(self, compute_grad_fn:Callable[...,dict[str,torch.Tensor]], *args, **kwargs):
+        self.prev_grad_norm = self.clip_grad_norm()
+        gradients = compute_grad_fn(*args, **kwargs)
+        _C.step_with_none(
+            self._params,
+            gradients,
+            self.lr
+        )
+    
+    @torch.no_grad()
+    def zero_grad(self, set_to_none=False):
+        _C.zero_grad(self.named_parameters(), set_to_none=set_to_none)
 
     def parameters_append(self, **kwargs):
         if self._wd != 0:

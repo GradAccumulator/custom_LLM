@@ -5,3 +5,9 @@ loss_functions = {
     'CE':CrossEntropyLoss,
     'MSE':MeanSquaredError
 }
+
+__all__ = [
+    'CrossEntropyLoss',
+    'MeanSquaredError',
+    'loss_functions'
+]

@@ -80,8 +80,6 @@ class koTokenizer:
         '''
         입력은 (L), 출력은 (L, seq_len)\t 
         #seq_len==None이면 각자 문장 크기\n
-        만약 입력이 (L, batch)라면 batch_encode로 하기\n
-        아니면 직접 for문 돌리든가\n
         만약 is_dataset == True면\n
         출력은 (L,seq_len)크기의 str list 2개
         --> (input, label)
@@ -132,10 +130,10 @@ class koTokenizer:
                         #with dev_utils.timer("label값 깊은복사"):
                     out_label = np.ctypeslib.as_array(res.arr_label, shape=(max_length, seq_len))[:res.act_len].astype(np.int16)
                     process_bottleneck.free_results(res.arr_label, max_length)
-                except Exception:
-                    traceback.print_exc()
+                except Exception as e:
                     process_bottleneck.free_results(res.arr_x, max_length)
                     process_bottleneck.free_results(res.arr_label, max_length)
+                    raise e
             return (out_x, out_label)
     
     def decode(self, input:list[list[int]]|list[int]) -> list[str]|str:

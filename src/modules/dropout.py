@@ -1,10 +1,10 @@
 import torch
 import src.c_modules as _C
-from src.modules.base_module import BaseModule
+from src.modules.base_module import Module
 
-class Dropout(BaseModule):
+class Dropout(Module):
     def __init__(self, p=0.1):
-        super().__init__()
+        super().__init__(None, None, p=p)
         self.p = p
         self._is_training = True
         

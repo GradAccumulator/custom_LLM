@@ -3,19 +3,6 @@ import torch
 def restore_param(tensor:torch.Tensor, *args, **kwargs):
     return tensor.to(*args, **kwargs).requires_grad_()
 
-def 보이면_바로_교체하기(arg1=None, arg2=None):
-    dtype = None
-    device = None
-    if isinstance(arg1, str):
-        device = arg1
-    elif isinstance(arg1, torch.dtype):
-        dtype = arg1
-    if isinstance(arg2, str):
-        device = arg2
-    elif isinstance(arg2, torch.dtype):
-        dtype = arg2
-    return device, dtype
-
 def device_dtype_check(*args, default_device=None, default_dtype=None, **kwargs) -> tuple[torch.device, torch.dtype]:
     device = default_device
     dtype = default_dtype

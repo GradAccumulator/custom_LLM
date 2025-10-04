@@ -21,8 +21,10 @@ class BoolWrapper:
 @contextmanager
 def run_on_exit_if_true(fn:Callable[[], Any], init_value=False):
     '''
-    init_value 값을 가진 BoolWrapper변수를 return함.
-    이후에 해당 리턴값이 True면 fn을 실행함
+    init_value 값을 가진 BoolWrapper변수를 return함.  \n
+    이후에 해당 리턴값이 True면 fn을 실행함             \n
+    trigger를 true로 바꿀땐 .true()                 \n
+    trigger를 false로 바꿀땐 .false()               \n
     >>> a = []
     >>> list = [1,2,3,4,5,6,7]
     >>> with run_on_exit_if_true(lambda:a.append(10)) as trigger:
@@ -40,6 +42,23 @@ def run_on_exit_if_true(fn:Callable[[], Any], init_value=False):
 __tab_num = 0
 @contextmanager
 def timer(text:str, n=3, **kargs):
+    
+    '''
+    시간 측정을 위한 contextmanager
+    >>> with timer("test"):
+    ...     time.sleep(1)
+    test: 1.000초
+    >>> #if use parent_timer,
+    >>> with parent_timer("test"):
+    ...     with timer("test2"):
+    ...         time.sleep(1)
+    ...     with timer("test3):
+    ...         time.sleep(1)
+    ----test
+        └test2: 1.000초
+        └test3: 1.000초
+    ---->test: 2.000초
+    '''
     global __tab_num
     start = time()
     yield
@@ -47,6 +66,34 @@ def timer(text:str, n=3, **kargs):
 
 @contextmanager
 def parent_timer(text:str, n=3, **kargs):
+    
+    '''
+    parent_timer는 timer 여러개를 묶는 용도로 씀
+    >>> with parent_timer("test"):
+    ...     with timer("test2"):
+    ...         time.sleep(1)
+    ...     with timer("test3"):
+    ...         time.sleep(1)
+    ----test
+        └test2: 1.000초
+        └test3: 1.000초
+    ---->test: 2.000초
+    >>> with parent_timer("딥러닝 모델 생성 전 처리"):
+    ...     with timer("데이터 불러오기"):
+    ...         ...
+    ...     with parent_timer("데이터 전처리"):
+    ...         with timer("train x,label 분리"):
+    ...             ...
+    ...         with timer("데이터 셔플"):
+    ...             ...
+    ----딥러닝 모델 생성 전 세팅
+        └데이터 불러오기: 1.000초
+    --------데이터 전처리
+            └train x,label 분리: 1.000초
+            └데이터 셔플: 1.000초
+    -------->데이터 전처리: 2.000초
+    ---->딥러닝 모델 생성 전 세팅: 3.000초
+    '''
     global __tab_num
     __tab_num += 1
     print(("----"*__tab_num) + text.format(**kargs))
@@ -54,6 +101,7 @@ def parent_timer(text:str, n=3, **kargs):
     yield
     print(("----"*__tab_num)+f">{text.format(**kargs)}: {time()-start:.{n}f}초")
     __tab_num -= 1
+
 def print_log(text:str, **kargs):
     print(("    "*__tab_num)[:-1]+("─"*(__tab_num!=0))+text.format(**kargs))
 

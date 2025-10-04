@@ -1,10 +1,9 @@
 import torch
-from .base_module import BaseModule
+from .base_module import Module
 from .linear import Linear
 from .scale import Scale
 from .activation_functions import Softmax
 from .dropout import Dropout
-from src.utils.torch_utils import 보이면_바로_교체하기
 import src.c_modules as _C
 import math
 
@@ -13,7 +12,7 @@ class IntRef(int):
         self.value = value
         self = value
 
-class SelfAttention(BaseModule):
+class SelfAttention(Module):
     def __init__(
         self, 
         d_model,

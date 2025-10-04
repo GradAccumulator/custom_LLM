@@ -1,15 +1,8 @@
 import torch
 from typing import overload, Any
-from .base_module import BaseModule
+from .base_module import Module
 
-class Sequential(BaseModule):
-    '''
-    sequential에 넣을 클래스에 있어야하는거 \n
-    to() : device, dtype 옵션 있으면, 그리고 device dtype 둘 다 있어야함. 안써도 받아야함\n
-    clone,init_like : 파라미터 있으면\n
-    load_state : 파라미터 있으면\n
-    state_dict : 파라미터 있으면\n
-    '''
+class Sequential(Module):
     @overload
     def __init__(self,*, device='cpu', dtype=torch.float32,**layers):...
     @overload
@@ -34,7 +27,7 @@ class Sequential(BaseModule):
             layers = dict(enumerate(layers_list))
             self.is_dict = False
         
-        self.layers  :dict[str, BaseModule]|dict[int, BaseModule] = layers
+        self.layers  :dict[str, Module]|dict[int, Module] = layers
 
         self.to(device=self.device, dtype=self.dtype)
     

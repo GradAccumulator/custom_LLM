@@ -10,3 +10,7 @@ from .activation_functions import *
 from .loss_functions import *
 from .sequential import Sequential
 from .layers import Layers
+from .base_module import Module
+from .embedding import Embedding
+from .positional_embedding import PositionalEmbedding
+from .conv import (Conv1d, Conv2d, Conv3d)

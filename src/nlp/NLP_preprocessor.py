@@ -19,50 +19,6 @@ class NLP_Preprocessor:
         self.train_label = None
         self.val_x = None
         self.val_label = None
-
-    def raw_data_reprocess(self):
-        import re
-        front_dots = re.compile(r'^\.{2,}')
-        behind_dots = re.compile(r'\.{2,}$')
-        middle_dots = re.compile(r'(?<=\S)\.{2,}(?=\S)')
-        many_spaces = re.compile(r'\s+')
-        ㅋㅋㅋㅋ = re.compile(r"\ㅋ{3,}")
-        한자 = re.compile(r'[\u4E00-\u9FFF]+')
-        i =0
-        with parent_timer("데이터 다시 전처리"):
-            with reading(self.config.RAW_DATA_PATH) as f:
-                texts = []
-                for line in f:
-                    line = line.strip()
-                    line = front_dots.sub('…', line)
-                    line = behind_dots.sub('…', line)
-                    line = middle_dots.sub(' ', line)
-                    line = 한자.sub('', line)
-                    line = ㅋㅋㅋㅋ.sub('ㅋㅋㅋ', line)
-                    line = line.replace('○', '<SPEAKER>')
-                    line = line.replace('■', '')
-                    line = line.replace('「', "'")
-                    line = line.replace('」', "'")
-                    line = line.replace('\\', '')
-                    line = line.replace('-', '')
-                    line = line.replace('π', '파이')
-                    line = line.replace('�', '')
-                    line = line.replace(' . ', ',')
-                    line = line.replace('·', ',')
-                    line = line.replace('▷', '')
-                    line = line.replace('Slave', '노예')
-                    line = line.replace('COMPUTER', '컴퓨터')
-                    line = many_spaces.sub(' ', line)
-                    
-                    texts.append(line)
-                    if (i:=i+1)%1000==0:
-                        print_log(f"{i}번째 데이터 재처리 완료")
-        with timer("데이터 저장"):
-            with writing(self.config.RAW_DATA_PATH) as f:
-                f.writelines([f"{line}\n" for line in texts])
-        Beep(300, 100)
-        Beep(300, 100)
-        Beep(300, 100)
     
     def __call__(self):
         return self.preprocess()
@@ -116,7 +72,7 @@ class NLP_Preprocessor:
 
     def _read_raw_datasets(self):
         trainset_len = 0
-        valset_len = 0
+        valset_len = 0  
         trainset_strlen = 0
         valset_strlen = 0
         valset = []
@@ -142,12 +98,16 @@ class NLP_Preprocessor:
     def _encode_and_pad(self, dataset, max_len):
         
         with parent_timer("인코딩&패딩"):
-            batchified = batchify(dataset, batch_size=100000)
+            batchified:list[list] = batchify(dataset, batch_size=100_000)
             inputs, labels = [],[]
-            for batch in batchified:
+            length = len(batchified)
+            print("total length :", length)
+            for idx,batch in enumerate(batchified, start=1):
                 i, l = self.model.encode(batch, is_dataset=True,max_length=500000)
                 inputs.append(i)
                 labels.append(l)
+                del batch
+                print(f"{idx/length*100:.2f}% complete...")
             inputs = torch.cat(inputs, dim=0)
             labels = torch.cat(labels, dim=0)
             inputs,labels = dp.shuffle_dataset(inputs, labels)

@@ -9,7 +9,7 @@ from assets.configs.trainer_config import TrainerConfig
 
 from src.nlp.NLP_preprocessor      import NLP_Preprocessor
 from src.utils                     import DataLoader
-from src.models.transformers       import (Transformer, TransformerII)
+from src.models.transformers       import (Transformer, MyTransformer)
 from src.training.Optimizers       import (Adam, SGD)
 from src.training.Scheduler        import (Scheduler, warmups, decays)
 from src.utils.logging             import (TBoardManager, Logger)
@@ -18,12 +18,13 @@ from src.training.trainer          import Trainer
 from src.modules.loss_functions    import CrossEntropyLoss
 from src.utils.dev_utils           import (timer, parent_timer)
 import PATHES
+import torch
 
 load_checkpoint = False
 if __name__ == '__main__':
     with parent_timer("학습 전 설정"):
         with timer("모델 생성"):
-            model = TransformerII(**transformer_config)
+            model = MyTransformer(**transformer_config)
         
         with timer("데이터 전처리"):
             preprocessor = NLP_Preprocessor(model, preprocessor_config)
@@ -34,13 +35,13 @@ if __name__ == '__main__':
             val_loader = DataLoader(val_x, val_label, device='cuda')
         
         with timer("optimizer & scheduler 생성"):
-            max_lr = 1e-4
+            max_lr = 3e-4
             optimizer = Adam(
                 model.named_parameters(),
                 max_lr,
-                0.9, 0.95, 1e-3,
+                0.9, 0.95, 1e-2,
                 eps=1e-8,
-                clip_grad=5,
+                clip_grad=5, 
                 device_transfer_while_conputing_mv=True,
             )
             
@@ -78,8 +79,8 @@ if __name__ == '__main__':
                 tboard_manager=tboard_manager,
                 scheduler=scheduler,
                 validation=False,
-                validation_interval=40,
-                tboard_update_interval=1,
+                validation_interval=5500,
+                tboard_update_interval=1, 
                 log_interval=1
             )
             

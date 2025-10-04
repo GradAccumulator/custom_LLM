@@ -31,5 +31,5 @@ def step_with_none(
         gradients,
         lr
     )
-def zero_grad(params:list[Tensor]):
-    _zero_grad.zero_grad(params)
+def zero_grad(params:list[Tensor], set_to_none=False):
+    _zero_grad.zero_grad(params, set_to_none)

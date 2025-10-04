@@ -3,11 +3,12 @@ from src.modules import (
     Sequential,
     Linear,
     ReLU,
-    Sigmoid
+    Module
 )
 
-class VAE:
+class VAE(Module):
     def __init__(self, d_in, hidden_dim, z_dim, device='cpu', dtype=torch.float32):
+        super().__init__(device, dtype, d_in=d_in, hidden_dim=hidden_dim, z_dim=z_dim, device=device, dtype=dtype)
         self.d_in = d_in
         self.d_latent = hidden_dim
         self.z_dim = z_dim
@@ -30,6 +31,7 @@ class VAE:
         
         self.encoder = self.encoder.to(device=device, dtype=dtype)
         self.decoder = self.decoder.to(device=device, dtype=dtype)
+    
     def reparameterize(self, mu:torch.Tensor, logvar:torch.Tensor):
         return mu + logvar.mul(0.5).exp()*torch.randn_like(logvar)
     
@@ -39,8 +41,3 @@ class VAE:
         sample = self.reparameterize(mu, logvar)
         out = self.decoder(sample)
         return out
-    
-    def parameters(self):
-        return self.encoder.parameters()+self.decoder.parameters()
-    def parameters_as_dict(self):
-        params = {}

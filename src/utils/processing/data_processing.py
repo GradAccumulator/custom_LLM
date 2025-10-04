@@ -11,6 +11,10 @@ def check_and_raise(condition:bool,text:str):
     if condition:
         raise ValueError(text)
 
+@overload
+def batchify(input:list|torch.Tensor, label:list|torch.Tensor=None, batch_size:int=1000)->tuple[list,list]:...
+@overload
+def batchify(input:list|torch.Tensor,*, batch_size:int=1000)->list:...
 def batchify(input:list|torch.Tensor, label:list|torch.Tensor=None, batch_size:int=1000):
     if label is not None:
         out_x = []

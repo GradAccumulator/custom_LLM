@@ -1,5 +1,5 @@
 from torch import Tensor
-from .base_module import BaseModule
+from .base_module import Module
 class Residual:
     def __init__(self):
         self.value = None

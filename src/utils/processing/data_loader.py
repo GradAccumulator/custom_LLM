@@ -3,7 +3,7 @@ import threading
 from src.utils.processing.data_processing import shuffle_dataset
 
 class DataLoader:
-    def __init__(self, inputs:list[torch.Tensor], labels:list[torch.Tensor],/,*, device='cpu',save_type=torch.int16):
+    def __init__(self, inputs:list[torch.Tensor], labels:list[torch.Tensor],/,*, device='cpu'):
         self.inputs = inputs
         self.labels = labels
         
@@ -69,8 +69,8 @@ class DataLoader:
         inputs = []
         labels = []
         for i in range(self._length):
-            inputs.append(self.inputs[i].cpu().detach().clone())
-            labels.append(self.labels[i].cpu().detach().clone())
+            inputs.append(self.inputs[i].cpu().detach())
+            labels.append(self.labels[i].cpu().detach())
         state = {
             'inputs':self.inputs,
             'labels':self.labels,

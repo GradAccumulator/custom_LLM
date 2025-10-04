@@ -2,7 +2,7 @@ import torch
 from typing import overload, Any
 #from src.utils.torch_utils import _
 from src.modules.to import To
-from .base_module import BaseModule
+from .base_module import Module
 
 
 class LayerWrapper(dict):
@@ -28,7 +28,7 @@ class LayerWrapper(dict):
             layers[i] = LayerWrapper(layers[i], i)
         return layers
 
-class Layers(BaseModule):
+class Layers(Module):
     @overload
     def __init__(self, modules:dict[str, Any], num_layers, device='cpu', dtype=torch.float32, save_inputs=False):...
     @overload
@@ -59,7 +59,7 @@ class Layers(BaseModule):
         #self.modules:dict[str, BaseModule]로 저장함
         
         super().setattr('modules', modules)
-        self.modules:dict[str, BaseModule]
+        self.modules:dict[str, Module]
         
         self.num_layers = num_layers
         self.layers = [{} for _ in range(self.num_layers)]
@@ -87,10 +87,10 @@ class Layers(BaseModule):
             raise IndexError
         return self.layers[idx]
     
-    def _set_layers(self, modules:dict[str,BaseModule]):
+    def _set_layers(self, modules:dict[str,Module]):
         for i in range(self.num_layers):
             for k,m in modules.items():
-                if isinstance(m, BaseModule):
+                if isinstance(m, Module):
                     m = m.init_like()
                     for name,param in m._buffer.items():
                         self._buffer[f'layers[{i}][{k}]({m.__class__.__name__}).{name}'] = param

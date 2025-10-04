@@ -21,8 +21,8 @@ class LeakyReLU(ActivationFunction):
     def __repr__(self):
         return f"LeakyReLU(a={self.a})"
 
-from src.modules.base_module import BaseModule
-class PReLU(BaseModule, ActivationFunction):
+from src.modules.base_module import Module
+class PReLU(Module, ActivationFunction):
     def __init__(self, a_init=0.1, device='cpu', dtype=torch.float32):
         self.device = device
         self._dtype = dtype
